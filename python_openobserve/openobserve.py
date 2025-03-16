@@ -274,6 +274,7 @@ class OpenObserve:
             return pandas.json_normalize(res["dashboards"])
         return res
 
+    # pylint: disable=too-many-branches
     def export_objects_split(
         self,
         object_type: str,
@@ -332,6 +333,7 @@ class OpenObserve:
                 pprint(f"Exception on json {object_type} {json_object[key2]}: {err}.")
         return True
 
+    # pylint: disable=too-many-locals,too-many-statements
     def config_export(
         self,
         file_path: str,
