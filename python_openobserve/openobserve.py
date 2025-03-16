@@ -1,3 +1,6 @@
+"""OpenObserve API module"""
+
+# pylint: disable=too-many-arguments,bare-except,broad-exception-raised,broad-exception-caught
 import base64
 import json
 
@@ -16,6 +19,7 @@ import pandas
 
 
 def flatten(dictionary, parent_key="", separator="."):
+    """Flatten dictionary"""
     items = []
     for key, value in dictionary.items():
         new_key = parent_key + separator + key if parent_key else key
@@ -27,6 +31,12 @@ def flatten(dictionary, parent_key="", separator="."):
 
 
 class OpenObserve:
+    """
+    OpenObserve class based on OpenObserve REST API
+    https://openobserve.ai/docs/api/
+    https://<openobserve server>/swagger/
+    """
+
     def __init__(
         self,
         user,
@@ -49,9 +59,11 @@ class OpenObserve:
         self.verify = verify
         self.timeout = timeout
 
+    # pylint: disable=invalid-name
     def __timestampConvert(self, timestamp: datetime) -> int:
         return int(timestamp.timestamp() * 1000000)
 
+    # pylint: disable=invalid-name
     def __unixTimestampConvert(self, timestamp: int) -> datetime:
         try:
             timestamp = datetime.fromtimestamp(timestamp / 1000000)
@@ -65,12 +77,14 @@ class OpenObserve:
                 flatdict[key] = self.__unixTimestampConvert(val)
         return flatdict
 
+    # pylint: disable=invalid-name
     def __datetime2Str(self, flatdict: dict) -> dict:
         for key, val in flatdict.items():
             if isinstance(val, datetime):
                 flatdict[key] = self.__timestampConvert(val)
         return flatdict
 
+    # pylint: disable=(missing-function-docstring
     def index(self, index: str, document: dict):
         assert isinstance(document, dict), "document must be a dict"
         # expects a flattened json
@@ -102,6 +116,10 @@ class OpenObserve:
         verbosity: int = 0,
         outformat: str = "json",
     ) -> List[Dict]:
+        """
+        OpenObserve search function
+        https://openobserve.ai/docs/api/search/search/
+        """
         if isinstance(start_time, datetime):
             # convert to unixtime
             start_time = self.__timestampConvert(start_time)
