@@ -31,6 +31,7 @@ class OpenObserve:
         self,
         user,
         password,
+        *,
         organisation="default",
         host="http://localhost:5080",
         verify=True,
@@ -95,6 +96,7 @@ class OpenObserve:
     def search(
         self,
         sql: str,
+        *,
         start_time: datetime = 0,
         end_time: datetime = 0,
         verbosity: int = 0,
@@ -259,6 +261,7 @@ class OpenObserve:
         object_type: str,
         json_data: dict,
         file_path: str,
+        *,
         verbosity: int = 0,
         flat: bool = False,
     ):
@@ -315,6 +318,7 @@ class OpenObserve:
         self,
         file_path: str,
         verbosity: int = 0,
+        *,
         outformat: str = "json",
         split: bool = False,
         flat: bool = False,
@@ -583,6 +587,7 @@ class OpenObserve:
         object_type: str,
         json_data: dict,
         file_path: str,
+        *,
         overwrite: bool = False,
         verbosity: int = 0,
     ):
@@ -622,6 +627,7 @@ class OpenObserve:
         self,
         object_type: str,
         file_path: str,
+        *,
         overwrite: bool = False,
         verbosity: int = 0,
         split: bool = False,
@@ -679,6 +685,7 @@ class OpenObserve:
         self,
         object_type: str,
         file_path: str,
+        *,
         overwrite: bool = False,
         verbosity: int = 0,
         split: bool = False,
@@ -689,58 +696,82 @@ class OpenObserve:
         """
         if object_type == "all" and split is True:
             self.import_objects(
-                "functions", f"{file_path}functions", overwrite, verbosity, split
+                "functions",
+                f"{file_path}functions",
+                overwrite=overwrite,
+                verbosity=verbosity,
+                split=split,
             )
             self.import_objects(
-                "pipelines", f"{file_path}pipelines", overwrite, verbosity, split
+                "pipelines",
+                f"{file_path}pipelines",
+                overwrite=overwrite,
+                verbosity=verbosity,
+                split=split,
             )
             # FIXME! Return 404. Text:
             # self.import_objects(
-            #     "alerts", f"{file_path}alerts", overwrite, verbosity, split
+            #     "alerts", f"{file_path}alerts", overwrite=overwrite, verbosity=verbosity, split
             # )
             # FIXME! ('Return 400. Text: {"code":400,
             #     "message":"Email destination must have SMTP ' 'configured"}')
             # self.import_objects(
             #     "alerts/destinations",
             #     f"{file_path}alerts/destinations",
-            #     overwrite,
-            #     verbosity,
-            #     split,
+            #     overwrite=overwrite,
+            #     verbosity=verbosity,
+            #     split=split,
             # )
             self.import_objects(
                 "alerts/templates",
                 f"{file_path}alerts/templates",
-                overwrite,
-                verbosity,
-                split,
+                overwrite=overwrite,
+                verbosity=verbosity,
+                split=split,
             )
             self.import_objects(
-                "dashboards", f"{file_path}dashboards", overwrite, verbosity, split
+                "dashboards",
+                f"{file_path}dashboards",
+                overwrite=overwrite,
+                verbosity=verbosity,
+                split=split,
             )
         elif object_type == "all":
             self.import_objects(
-                "functions", f"{file_path}functions.json", overwrite, verbosity
+                "functions",
+                f"{file_path}functions.json",
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             self.import_objects(
-                "pipelines", f"{file_path}pipelines.json", overwrite, verbosity
+                "pipelines",
+                f"{file_path}pipelines.json",
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             self.import_objects(
-                "alerts", f"{file_path}alerts.json", overwrite, verbosity
+                "alerts",
+                f"{file_path}alerts.json",
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             self.import_objects(
                 "alerts/destinations",
                 f"{file_path}alerts-destinations.json",
-                overwrite,
-                verbosity,
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             self.import_objects(
                 "alerts/templates",
                 f"{file_path}alerts-templates.json",
-                overwrite,
-                verbosity,
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             self.import_objects(
-                "dashboards", f"{file_path}dashboards.json", overwrite, verbosity
+                "dashboards",
+                f"{file_path}dashboards.json",
+                overwrite=overwrite,
+                verbosity=verbosity,
             )
             # No CreateStream, only CreateStreamSettings
             # self.import_objects('streams', f"{file_path}streams.json", overwrite, verbosity)
@@ -748,4 +779,6 @@ class OpenObserve:
             #     Json deserialize error: missing field `password` at line 1" = Extra field required
             # self.import_objects('users', f"{file_path}users.json", overwrite, verbosity)
         else:
-            self.import_objects(object_type, file_path, overwrite, verbosity)
+            self.import_objects(
+                object_type, file_path, overwrite=overwrite, verbosity=verbosity
+            )
