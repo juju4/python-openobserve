@@ -1,12 +1,17 @@
-import requests
 import base64
-from datetime import datetime, timedelta
+import json
+
+# import glob
+import os
+import sys
+from pprint import pprint
+from datetime import datetime
 from collections.abc import MutableMapping
 from typing import List, Dict
 from pathlib import Path
+
+import requests
 import sqlglot
-import json
-from pprint import pprint
 import pandas
 
 
@@ -29,6 +34,7 @@ class OpenObserve:
         organisation="default",
         host="http://localhost:5080",
         verify=True,
+        timeout=10,
     ) -> None:
         bas64encoded_creds = base64.b64encode(
             bytes(user + ":" + password, "utf-8")
@@ -40,6 +46,7 @@ class OpenObserve:
             "Authorization": "Basic " + bas64encoded_creds,
         }
         self.verify = verify
+        self.timeout = timeout
 
     def __timestampConvert(self, timestamp: datetime) -> int:
         return int(timestamp.timestamp() * 1000000)
@@ -74,6 +81,7 @@ class OpenObserve:
             headers=self.headers,
             json=[document],
             verify=self.verify,
+            timeout=self.timeout,
         )
         if res.status_code != 200:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
@@ -113,6 +121,7 @@ class OpenObserve:
             json=query,
             headers=self.headers,
             verify=self.verify,
+            timeout=self.timeout,
         )
         if res.status_code != 200:
             raise Exception(
@@ -131,8 +140,10 @@ class OpenObserve:
         List available functions
         https://openobserve.ai/docs/api/functions
         """
-        url = self.openobserve_url.replace("[STREAM]", f"functions")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        url = self.openobserve_url.replace("[STREAM]", "functions")
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -146,8 +157,10 @@ class OpenObserve:
         """
         List available pipelines
         """
-        url = self.openobserve_url.replace("[STREAM]", f"pipelines")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        url = self.openobserve_url.replace("[STREAM]", "pipelines")
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -171,7 +184,9 @@ class OpenObserve:
         url = self.openobserve_url.replace(
             "[STREAM]", f"streams?fetchSchema={schema}&type={streamtype}"
         )
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -186,7 +201,9 @@ class OpenObserve:
         List configured alerts on server
         """
         url = self.openobserve_url.replace("[STREAM]", "alerts")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -201,8 +218,10 @@ class OpenObserve:
         List available users
         https://openobserve.ai/docs/api/users
         """
-        url = self.openobserve_url.replace("[STREAM]", f"users")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        url = self.openobserve_url.replace("[STREAM]", "users")
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -212,9 +231,9 @@ class OpenObserve:
             try:
                 return pandas.json_normalize(res["data"])
             except KeyError as err:
-                raise Exception(f"Exception KeyError: {err}")
+                raise Exception(f"Exception KeyError: {err}") from err
             except Exception as err:
-                raise Exception(f"Exception: {err}")
+                raise Exception(f"Exception: {err}") from err
         return res
 
     def list_dashboards(self, verbosity: int = 0, outformat: str = "json"):
@@ -222,8 +241,10 @@ class OpenObserve:
         List available dashboards
         https://openobserve.ai/docs/api/dashboards
         """
-        url = self.openobserve_url.replace("[STREAM]", f"dashboards")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        url = self.openobserve_url.replace("[STREAM]", "dashboards")
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -302,7 +323,7 @@ class OpenObserve:
         Export OpenObserve configuration to json/csv/xlsx
         """
         outformat2 = outformat
-        if outformat == "csv" or outformat == "xlsx":
+        if outformat in ("csv", "xlsx"):
             outformat2 = "df"
         functions1 = self.list_objects(
             "functions", verbosity=verbosity, outformat=outformat2
@@ -391,32 +412,32 @@ class OpenObserve:
             with open(f"{file_path}users.json", "w", encoding="utf-8") as f:
                 json.dump(users1, f, ensure_ascii=False, indent=4)
 
-    def create_function(
-        self, function_json: str, verbosity: int = 0, outformat: str = "json"
-    ):
+    def create_function(self, function_json: str, verbosity: int = 0):
         """
         Create function
         https://openobserve.ai/docs/api/function/create
         """
-        url = self.openobserve_url.replace("[STREAM]", f"functions")
+        url = self.openobserve_url.replace("[STREAM]", "functions")
         if verbosity > 0:
             pprint(f"Create function url: {url}")
         if verbosity > 2:
             pprint(f"Create function json input: {function_json}")
         res = requests.post(
-            url, json=function_json, headers=self.headers, verify=self.verify
+            url,
+            json=function_json,
+            headers=self.headers,
+            verify=self.verify,
+            timeout=self.timeout,
         )
         if verbosity > 1:
             pprint(f"Return {res.status_code}. Text: {res.text}")
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         if verbosity > 0:
-            pprint(f"Create function completed")
+            pprint("Create function completed")
         return True
 
-    def update_function(
-        self, function_json: str, verbosity: int = 0, outformat: str = "json"
-    ):
+    def update_function(self, function_json: str, verbosity: int = 0):
         """
         Update function
         https://openobserve.ai/docs/api/function/update
@@ -429,14 +450,18 @@ class OpenObserve:
         if verbosity > 2:
             pprint(f"Update function json input: {function_json}")
         res = requests.put(
-            url, json=function_json, headers=self.headers, verify=self.verify
+            url,
+            json=function_json,
+            headers=self.headers,
+            verify=self.verify,
+            timeout=self.timeout,
         )
         if verbosity > 1:
             pprint(f"Return {res.status_code}. Text: {res.text}")
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         if verbosity > 0:
-            pprint(f"Update function completed")
+            pprint("Update function completed")
         return True
 
     def import_functions(
@@ -444,16 +469,15 @@ class OpenObserve:
         file_path: str,
         overwrite: bool = False,
         verbosity: int = 0,
-        outformat: str = "json",
     ):
         """
         Import functions from json
         Note: API does not import list of functions, need to do one by one.
         """
-        url = self.openobserve_url.replace("[STREAM]", f"functions")
+        url = self.openobserve_url.replace("[STREAM]", "functions")
         if verbosity > 0:
             pprint(url)
-        with open(file_path, "r") as json_file:
+        with open(file_path, "r", encoding="utf-8") as json_file:
             json_data = json.loads(json_file.read())
             if verbosity > 2:
                 pprint(json_data)
@@ -465,7 +489,7 @@ class OpenObserve:
                 try:
                     res = self.create_function(function, verbosity=verbosity)
                     return res
-                except Exception as err:
+                except:
                     if overwrite:
                         print(
                             f"Overwrite enabled. Updating function {function['name']}"
@@ -485,10 +509,12 @@ class OpenObserve:
             key = "dashboards"
         if object_type == "users":
             key = "data"
-        if object_type == "alerts/destinations" or object_type == "alerts/templates":
+        if object_type in ("alerts/destinations", "alerts/templates"):
             key = 0
         url = self.openobserve_url.replace("[STREAM]", f"{object_type}")
-        res = requests.get(url, headers=self.headers, verify=self.verify)
+        res = requests.get(
+            url, headers=self.headers, verify=self.verify, timeout=self.timeout
+        )
         if verbosity > 0:
             pprint(url)
         if res.status_code != requests.codes.ok:
@@ -508,7 +534,11 @@ class OpenObserve:
         if verbosity > 2:
             pprint(f"Create object json input: {object_json}")
         res = requests.post(
-            url, json=object_json, headers=self.headers, verify=self.verify
+            url,
+            json=object_json,
+            headers=self.headers,
+            verify=self.verify,
+            timeout=self.timeout,
         )
         if verbosity > 1:
             pprint(f"Return {res.status_code}. Text: {res.text}")
@@ -517,7 +547,7 @@ class OpenObserve:
             # pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
             # return False
         if verbosity > 0:
-            pprint(f"Create object completed")
+            pprint("Create object completed")
         return True
 
     def update_object(self, object_type: str, object_json: str, verbosity: int = 0):
@@ -532,7 +562,11 @@ class OpenObserve:
         if verbosity > 2:
             pprint(f"Update object json input: {object_json}")
         res = requests.put(
-            url, json=object_json, headers=self.headers, verify=self.verify
+            url,
+            json=object_json,
+            headers=self.headers,
+            verify=self.verify,
+            timeout=self.timeout,
         )
         if verbosity > 3:
             pprint(f"Return {res.status_code}. Text: {res.text}")
@@ -541,7 +575,7 @@ class OpenObserve:
             # pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
             # return False
         if verbosity > 0:
-            pprint(f"Update object completed")
+            pprint("Update object completed")
         return True
 
     def import_objects_split(
@@ -616,21 +650,15 @@ class OpenObserve:
             return True
 
         key = "list"
-        key2 = "name"
         if object_type == "dashboards":
             key = "dashboards"
-            key2 = "dashboardId"
         if object_type == "users":
             key = "data"
-            key2 = "email"
-        with open(file_path, "r") as json_file:
+        with open(file_path, "r", encoding="utf-8") as json_file:
             json_data = json.loads(json_file.read())
             if verbosity > 3:
                 pprint(json_data)
-            if (
-                object_type == "alerts/destinations"
-                or object_type == "alerts/templates"
-            ):
+            if object_type in ("alerts/destinations", "alerts/templates"):
                 json_list = json_data
             else:
                 try:
@@ -638,25 +666,13 @@ class OpenObserve:
                 except:
                     json_list = [json_data]
             for json_object in json_list:
-                if verbosity > 0:
-                    pprint(f"Try to create {object_type} {json_object[key2]}...")
-                if verbosity > 2:
-                    pprint(json_object)
-                try:
-                    res = self.create_object(
-                        object_type, json_object, verbosity=verbosity
-                    )
-                    pprint(f"Create returns {res}.")
-                    return res
-                except Exception as err:
-                    if overwrite:
-                        print(
-                            f"Overwrite enabled. Updating object {json_object['name']}"
-                        )
-                        res = self.update_object(
-                            object_type, json_object, verbosity=verbosity
-                        )
-                        pprint(f"Update returns {res}.")
+                self.import_objects_split(
+                    object_type,
+                    json_object,
+                    "",
+                    overwrite=overwrite,
+                    verbosity=verbosity,
+                )
         return True
 
     def config_import(
@@ -728,7 +744,8 @@ class OpenObserve:
             )
             # No CreateStream, only CreateStreamSettings
             # self.import_objects('streams', f"{file_path}streams.json", overwrite, verbosity)
-            # "Return 400. Text: Json deserialize error: missing field `password` at line 1" = Extra field required
+            # "Return 400. Text:
+            #     Json deserialize error: missing field `password` at line 1" = Extra field required
             # self.import_objects('users', f"{file_path}users.json", overwrite, verbosity)
         else:
             self.import_objects(object_type, file_path, overwrite, verbosity)
