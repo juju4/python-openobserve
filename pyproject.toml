@@ -25,6 +25,9 @@ pandas = [
 ]
 all = ['pandas']
 
+[tool.optional-dependencies]
+tests = ["pytest"]
+
 [tool.poetry.scripts]
 python_openobserve = 'python_openobserve:openobserve'
 
