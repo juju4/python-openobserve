@@ -60,8 +60,16 @@ class OpenObserve:
         self.timeout = timeout
 
     # pylint: disable=invalid-name
-    def __timestampConvert(self, timestamp: datetime) -> int:
-        return int(timestamp.timestamp() * 1000000)
+    def __timestampConvert(self, timestamp: datetime, verbosity: int = 0) -> int:
+        try:
+            if verbosity > 2:
+                print(f"__timestampConvert input: {timestamp}")
+            return int(timestamp.timestamp() * 1000000)
+        except Exception as exc:
+            # pylint: disable=raising-bad-type
+            raise (
+                f"Exception from __timestampConvert for timestamp {timestamp}: {exc}"
+            )
 
     # pylint: disable=invalid-name
     def __unixTimestampConvert(self, timestamp: int) -> datetime:
@@ -122,10 +130,17 @@ class OpenObserve:
         """
         if isinstance(start_time, datetime):
             # convert to unixtime
-            start_time = self.__timestampConvert(start_time)
+            start_time = self.__timestampConvert(start_time, verbosity=verbosity)
+        elif not isinstance(start_time, int):
+            pprint("Error! start_time neither datetime, nor int")
         if isinstance(end_time, datetime):
             # convert to unixtime
-            end_time = self.__timestampConvert(end_time)
+            end_time = self.__timestampConvert(end_time, verbosity=verbosity)
+        elif not isinstance(start_time, int):
+            pprint("Error! end_time neither datetime, nor int")
+
+        if verbosity > 1:
+            pprint(f"Query Time start {start_time} end {end_time}")
 
         # verify sql
         try:
@@ -149,6 +164,8 @@ class OpenObserve:
             )
         # timestamp back convert
         res = res.json()["hits"]
+        if verbosity > 3:
+            pprint(res)
         res = [self.__intts2datetime(x) for x in res]
         if outformat == "df":
             # FIXME! set type for _timestamp column
@@ -209,6 +226,8 @@ class OpenObserve:
         )
         if verbosity > 0:
             pprint(url)
+        if verbosity > 3:
+            pprint(res)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
@@ -541,6 +560,8 @@ class OpenObserve:
         )
         if verbosity > 0:
             pprint(url)
+        if verbosity > 3:
+            pprint(res)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
