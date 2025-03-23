@@ -20,13 +20,11 @@ pydantic = "~=2.10"
 sqlglot = "~=26.4.0"
 
 [tool.optional-dependencies]
+tests = ["pytest"]
 pandas = [
     "pandas>2.2"
 ]
-all = ['pandas']
-
-[tool.optional-dependencies]
-tests = ["pytest"]
+all = ['pandas', 'tests']
 
 [tool.poetry.scripts]
 python_openobserve = 'python_openobserve:openobserve'
