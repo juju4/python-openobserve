@@ -15,7 +15,16 @@ from pathlib import Path
 
 import requests
 import sqlglot
-import pandas
+
+try:
+    import pandas
+
+    HAVE_MODULE_PANDAS = True
+except ImportError:
+    print(
+        "Can't import pandas. dataframe output, csv and xlsx export will be unavailable."
+    )
+    HAVE_MODULE_PANDAS = False
 
 
 def flatten(dictionary, parent_key="", separator="."):
@@ -167,9 +176,9 @@ class OpenObserve:
         if verbosity > 3:
             pprint(res)
         res = [self.__intts2datetime(x) for x in res]
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             # FIXME! set type for _timestamp column
-            return pandas.json_normalize(res["hits"])
+            return pandas.json_normalize(res)
         return res
 
     def list_functions(self, verbosity: int = 0, outformat: str = "json"):
@@ -186,7 +195,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res["list"])
         return res
 
@@ -203,7 +212,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res["list"])
         return res
 
@@ -231,7 +240,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res["list"])
         return res
 
@@ -248,7 +257,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res["list"])
         return res
 
@@ -266,7 +275,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             try:
                 return pandas.json_normalize(res["data"])
             except KeyError as err:
@@ -289,7 +298,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res["dashboards"])
         return res
 
@@ -565,7 +574,7 @@ class OpenObserve:
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
         res = res.json()
-        if outformat == "df":
+        if outformat == "df" and HAVE_MODULE_PANDAS:
             return pandas.json_normalize(res[key])
         return res
 
