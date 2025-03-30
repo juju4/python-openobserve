@@ -10,7 +10,7 @@ import sys
 from pprint import pprint
 from datetime import datetime
 from collections.abc import MutableMapping
-from typing import List, Dict
+from typing import List, Dict, Union, cast
 from pathlib import Path
 
 import requests
@@ -83,10 +83,10 @@ class OpenObserve:
     # pylint: disable=invalid-name
     def __unixTimestampConvert(self, timestamp: int) -> datetime:
         try:
-            timestamp = datetime.fromtimestamp(timestamp / 1000000)
+            timestamp_out = datetime.fromtimestamp(timestamp / 1000000)
         except:
             print("could not convert timestamp: " + str(timestamp))
-        return timestamp
+        return timestamp_out
 
     def __intts2datetime(self, flatdict: dict) -> dict:
         for key, val in flatdict.items():
@@ -128,11 +128,11 @@ class OpenObserve:
         self,
         sql: str,
         *,
-        start_time: datetime = 0,
-        end_time: datetime = 0,
+        start_time: Union[datetime, int] = 0,
+        end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
         outformat: str = "json",
-    ) -> List[Dict]:
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         OpenObserve search function
         https://openobserve.ai/docs/api/search/search/
@@ -142,11 +142,17 @@ class OpenObserve:
             start_time = self.__timestampConvert(start_time, verbosity=verbosity)
         elif not isinstance(start_time, int):
             pprint("Error! start_time neither datetime, nor int")
+            raise Exception(
+                f"Search invalid start_time input"
+            )
         if isinstance(end_time, datetime):
             # convert to unixtime
             end_time = self.__timestampConvert(end_time, verbosity=verbosity)
         elif not isinstance(start_time, int):
             pprint("Error! end_time neither datetime, nor int")
+            raise Exception(
+                f"Search invalid end_time input"
+            )
 
         if verbosity > 1:
             pprint(f"Query Time start {start_time} end {end_time}")
@@ -172,14 +178,14 @@ class OpenObserve:
                 f"Openobserve returned {res.status_code}. Text: {res.text}. url: {res.url}"
             )
         # timestamp back convert
-        res = res.json()["hits"]
+        res_hits = res.json()["hits"]
         if verbosity > 3:
-            pprint(res)
-        res = [self.__intts2datetime(x) for x in res]
+            pprint(res_hits)
+        res_hits = [self.__intts2datetime(x) for x in res_hits]
         if outformat == "df" and HAVE_MODULE_PANDAS:
             # FIXME! set type for _timestamp column
-            return pandas.json_normalize(res)
-        return res
+            return pandas.json_normalize(res_hits)
+        return res_hits
 
     def list_functions(self, verbosity: int = 0, outformat: str = "json"):
         """
@@ -333,15 +339,15 @@ class OpenObserve:
         if object_type in ("alerts/destinations", "alerts/templates"):
             if verbosity > 2:
                 pprint("json_list set to alerts type")
-            json_list = json_data
+            json_list = cast(List[Dict], json_data)
         else:
             try:
-                json_list = json_data[key]
+                json_list = cast(List[Dict], json_data[key])
                 if verbosity > 2:
                     pprint(f"json_list set to key {key}")
                     pprint(json_list)
             except:
-                json_list = [json_data]
+                json_list = cast(List[Dict], [json_data])
                 if verbosity > 2:
                     pprint("json_list set to array")
                     pprint(json_list)
@@ -464,7 +470,7 @@ class OpenObserve:
             with open(f"{file_path}users.json", "w", encoding="utf-8") as f:
                 json.dump(users1, f, ensure_ascii=False, indent=4)
 
-    def create_function(self, function_json: str, verbosity: int = 0):
+    def create_function(self, function_json: dict, verbosity: int = 0):
         """
         Create function
         https://openobserve.ai/docs/api/function/create
@@ -489,7 +495,7 @@ class OpenObserve:
             pprint("Create function completed")
         return True
 
-    def update_function(self, function_json: str, verbosity: int = 0):
+    def update_function(self, function_json: dict, verbosity: int = 0):
         """
         Update function
         https://openobserve.ai/docs/api/function/update
@@ -556,6 +562,7 @@ class OpenObserve:
         """
         List available objects for given type
         """
+        key: Union[str, int]
         key = "list"
         if object_type == "dashboards":
             key = "dashboards"
@@ -578,7 +585,7 @@ class OpenObserve:
             return pandas.json_normalize(res[key])
         return res
 
-    def create_object(self, object_type: str, object_json: str, verbosity: int = 0):
+    def create_object(self, object_type: str, object_json: dict, verbosity: int = 0):
         """
         Create object
         """
@@ -597,14 +604,13 @@ class OpenObserve:
         if verbosity > 1:
             pprint(f"Return {res.status_code}. Text: {res.text}")
         if res.status_code != requests.codes.ok:
-            raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-            # pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
-            # return False
+            pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
+            return False
         if verbosity > 0:
             pprint("Create object completed")
         return True
 
-    def update_object(self, object_type: str, object_json: str, verbosity: int = 0):
+    def update_object(self, object_type: str, object_json: dict, verbosity: int = 0):
         """
         Update object
         """
@@ -648,7 +654,7 @@ class OpenObserve:
         if object_type == "dashboards":
             key2 = "dashboard_id"
         file = Path(file_path)
-        if json_data is None and file.exists():
+        if (json_data is None or not json_data) and file.exists():
             with open(file_path, "r", encoding="utf-8") as json_file:
                 pprint(f"Load json data to import from file {file_path}")
                 json_data = json.loads(json_file.read())
@@ -664,13 +670,18 @@ class OpenObserve:
         try:
             res = self.create_object(object_type, json_data, verbosity=verbosity)
             pprint(f"Create returns {res}.")
-            return res
-        except:
+
+            if res:
+                return res
+
             if overwrite:
                 print(f"Overwrite enabled. Updating object {json_data[key2]}")
                 res = self.update_object(object_type, json_data, verbosity=verbosity)
                 pprint(f"Update returns {res}.")
                 return res
+
+        except Exception as exc:
+            raise Exception(f"Exception: {exc}") from exc
         return False
 
     def import_objects(
@@ -698,7 +709,7 @@ class OpenObserve:
                     pprint(f"import_objects: file {file}")
                 self.import_objects_split(
                     object_type,
-                    None,
+                    {},
                     f"{file_path}/{file}",
                     overwrite=overwrite,
                     verbosity=verbosity,
