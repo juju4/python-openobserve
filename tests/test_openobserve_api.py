@@ -3,6 +3,8 @@
 import os
 from datetime import datetime, timedelta
 from pprint import pprint
+import pytest
+import sqlglot
 import jmespath
 from dotenv import load_dotenv
 from python_openobserve.openobserve import OpenObserve
@@ -40,6 +42,16 @@ def test_list_streams():
     # pprint(res)
     default_stream = jmespath.search("list[?name=='default']", res)
     assert default_stream
+
+
+def test_list_streams401():
+    """Ensure can list streams and have 'default' one (list_streams)"""
+    oo_conn = OpenObserve(host=OO_HOST, user="invalid@example.com", password="")
+    with pytest.raises(
+        Exception,
+        match="Openobserve returned 401. Text: Unauthorized Access",
+    ):
+        oo_conn.list_streams()
 
 
 def test_list_object_streams():
@@ -152,3 +164,109 @@ def test_search1_dftypes():
     assert df_search_results.shape
     assert not df_search_results.columns.empty
     assert df_search_results["_timestamp"].dtypes == "datetime64[ns]"
+
+
+def test_search_sql_invalid1():
+    """Ensure error on invalid sql input"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "SELECT NOT SQL"
+    start_timeperiod = datetime.now() - timedelta(days=7)
+    end_timeperiod = datetime.now()
+    with pytest.raises(Exception, match="Openobserve returned 502."):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_sql_invalid2():
+    """Ensure error on invalid sql input"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "INVALID"
+    start_timeperiod = datetime.now() - timedelta(days=7)
+    end_timeperiod = datetime.now()
+    with pytest.raises(
+        Exception,
+        match=(
+            "Openobserve returned 500. Text: "
+            '{"code":500,"message":"sql parser error: Expected: an SQL statement, found: INVALID"}'
+        ),
+    ):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_sql_invalid3():
+    """Ensure error on invalid sql input"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "NOT SQL"
+    start_timeperiod = datetime.now() - timedelta(days=7)
+    end_timeperiod = datetime.now()
+    with pytest.raises(
+        Exception,
+        match=(
+            "Openobserve returned 500. Text: "
+            '{"code":500,"message":"sql parser error: Expected: an SQL statement, found: NOT"}.'
+            r" url: .*"
+        ),
+    ):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_sql_invalid4():
+    """Ensure error on invalid sql input"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "123"
+    start_timeperiod = datetime.now() - timedelta(days=7)
+    end_timeperiod = datetime.now()
+    with pytest.raises(
+        Exception,
+        match=(
+            "Openobserve returned 500. Text: "
+            '{"code":500,"message":"sql parser error: Expected: an SQL statement, found: 123"}'
+        ),
+    ):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_sql_parse_error1():
+    """Ensure par error on sql input"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = 'SELECT _timestamp FROM (SELECT _timestamp FROM "default"'
+    start_timeperiod = datetime.now() - timedelta(days=7)
+    end_timeperiod = datetime.now()
+
+    # Warning! "SQLGlot does not aim to be a SQL validator"
+    #   https://github.com/tobymao/sqlglot?tab=readme-ov-file#faq
+    with pytest.raises(sqlglot.errors.ParseError, match=r"Expecting \)"):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_time_invalid1():
+    """Ensure error on invalid time input (float)"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = 'SELECT log_file_name,count(*) FROM "default" GROUP BY log_file_name'
+    start_timeperiod = 0.1
+    end_timeperiod = 0
+    with pytest.raises(Exception, match="Search invalid start_time input"):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
+
+
+def test_search_time_invalid2():
+    """Ensure error on invalid time input (bytes)"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = 'SELECT log_file_name,count(*) FROM "default" GROUP BY log_file_name'
+    start_timeperiod = b"abc"
+    end_timeperiod = 0
+    with pytest.raises(Exception, match="Search invalid start_time input"):
+        oo_conn.search(
+            sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
+        )
