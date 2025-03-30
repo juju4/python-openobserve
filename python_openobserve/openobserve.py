@@ -142,17 +142,13 @@ class OpenObserve:
             start_time = self.__timestampConvert(start_time, verbosity=verbosity)
         elif not isinstance(start_time, int):
             pprint("Error! start_time neither datetime, nor int")
-            raise Exception(
-                f"Search invalid start_time input"
-            )
+            raise Exception("Search invalid start_time input")
         if isinstance(end_time, datetime):
             # convert to unixtime
             end_time = self.__timestampConvert(end_time, verbosity=verbosity)
         elif not isinstance(start_time, int):
             pprint("Error! end_time neither datetime, nor int")
-            raise Exception(
-                f"Search invalid end_time input"
-            )
+            raise Exception("Search invalid end_time input")
 
         if verbosity > 1:
             pprint(f"Query Time start {start_time} end {end_time}")
