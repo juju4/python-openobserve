@@ -1,6 +1,6 @@
 """OpenObserve API module"""
 
-# pylint: disable=too-many-arguments,bare-except,broad-exception-raised,broad-exception-caught
+# pylint: disable=too-many-arguments,bare-except,broad-exception-raised,broad-exception-caught,too-many-public-methods
 import base64
 import json
 
@@ -14,7 +14,7 @@ from typing import List, Dict, Union, cast
 from pathlib import Path
 
 import requests
-import sqlglot
+import sqlglot  # type: ignore
 
 try:
     import pandas
@@ -76,7 +76,7 @@ class OpenObserve:
             return int(timestamp.timestamp() * 1000000)
         except Exception as exc:
             # pylint: disable=raising-bad-type
-            raise (
+            raise (  # type: ignore[misc]
                 f"Exception from __timestampConvert for timestamp {timestamp}: {exc}"
             )
 
@@ -117,12 +117,12 @@ class OpenObserve:
         )
         if res.status_code != 200:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
-        if res["status"][0]["failed"] > 0:
+        res_json = res.json()
+        if res_json["status"][0]["failed"] > 0:
             raise Exception(
-                f"Openobserve index failed. {res['status'][0]['error']}. document: {document}"
+                f"Openobserve index failed. {res_json['status'][0]['error']}. document: {document}"
             )
-        return res
+        return res_json
 
     def search(
         self,
@@ -131,8 +131,7 @@ class OpenObserve:
         start_time: Union[datetime, int] = 0,
         end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
-        outformat: str = "json",
-    ) -> Union[List[Dict], pandas.DataFrame]:
+    ) -> List[Dict]:
         """
         OpenObserve search function
         https://openobserve.ai/docs/api/search/search/
@@ -178,12 +177,31 @@ class OpenObserve:
         if verbosity > 3:
             pprint(res_hits)
         res_hits = [self.__intts2datetime(x) for x in res_hits]
-        if outformat == "df" and HAVE_MODULE_PANDAS:
-            # FIXME! set type for _timestamp column
-            return pandas.json_normalize(res_hits)
         return res_hits
 
-    def list_functions(self, verbosity: int = 0, outformat: str = "json"):
+    def search2df(
+        self,
+        sql: str,
+        *,
+        start_time: Union[datetime, int] = 0,
+        end_time: Union[datetime, int] = 0,
+        verbosity: int = 0,
+    ) -> pandas.DataFrame:
+        """
+        OpenObserve search function with df output
+        https://openobserve.ai/docs/api/search/search/
+        """
+        # timestamp back convert
+
+        # FIXME! set type for _timestamp column
+        res_json_hits = self.search(
+            sql, start_time=start_time, end_time=end_time, verbosity=verbosity
+        )
+        return pandas.json_normalize(res_json_hits)
+
+    def list_functions(
+        self, verbosity: int = 0, outformat: str = "json"
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List available functions
         https://openobserve.ai/docs/api/functions
@@ -196,12 +214,14 @@ class OpenObserve:
             pprint(url)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res["list"])
-        return res
+            return pandas.json_normalize(res_json["list"])
+        return res_json
 
-    def list_pipelines(self, verbosity: int = 0, outformat: str = "json"):
+    def list_pipelines(
+        self, verbosity: int = 0, outformat: str = "json"
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List available pipelines
         """
@@ -213,10 +233,10 @@ class OpenObserve:
             pprint(url)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res["list"])
-        return res
+            return pandas.json_normalize(res_json["list"])
+        return res_json
 
     def list_streams(
         self,
@@ -224,7 +244,7 @@ class OpenObserve:
         streamtype: str = "logs",
         verbosity: int = 0,
         outformat: str = "json",
-    ):
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List available streams
         https://openobserve.ai/docs/api/stream/list/
@@ -241,12 +261,14 @@ class OpenObserve:
             pprint(res)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res["list"])
-        return res
+            return pandas.json_normalize(res_json["list"])
+        return res_json
 
-    def list_alerts(self, verbosity: int = 0, outformat: str = "json"):
+    def list_alerts(
+        self, verbosity: int = 0, outformat: str = "json"
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List configured alerts on server
         """
@@ -258,12 +280,14 @@ class OpenObserve:
             pprint(url)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res["list"])
-        return res
+            return pandas.json_normalize(res_json["list"])
+        return res_json
 
-    def list_users(self, verbosity: int = 0, outformat: str = "json"):
+    def list_users(
+        self, verbosity: int = 0, outformat: str = "json"
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List available users
         https://openobserve.ai/docs/api/users
@@ -276,17 +300,19 @@ class OpenObserve:
             pprint(url)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
             try:
-                return pandas.json_normalize(res["data"])
+                return pandas.json_normalize(res_json["data"])
             except KeyError as err:
                 raise Exception(f"Exception KeyError: {err}") from err
             except Exception as err:
                 raise Exception(f"Exception: {err}") from err
-        return res
+        return res_json
 
-    def list_dashboards(self, verbosity: int = 0, outformat: str = "json"):
+    def list_dashboards(
+        self, verbosity: int = 0, outformat: str = "json"
+    ) -> Union[List[Dict], pandas.DataFrame]:
         """
         List available dashboards
         https://openobserve.ai/docs/api/dashboards
@@ -299,16 +325,16 @@ class OpenObserve:
             pprint(url)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
+        res_json = res.json()
         if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res["dashboards"])
-        return res
+            return pandas.json_normalize(res_json["dashboards"])
+        return res_json
 
     # pylint: disable=too-many-branches
     def export_objects_split(
         self,
         object_type: str,
-        json_data: dict,
+        json_data: list[dict],
         file_path: str,
         *,
         verbosity: int = 0,
@@ -338,7 +364,7 @@ class OpenObserve:
             json_list = cast(List[Dict], json_data)
         else:
             try:
-                json_list = cast(List[Dict], json_data[key])
+                json_list = cast(List[Dict], json_data[key])  # type: ignore[call-overload]
                 if verbosity > 2:
                     pprint(f"json_list set to key {key}")
                     pprint(json_list)
@@ -376,95 +402,114 @@ class OpenObserve:
         """
         Export OpenObserve configuration to json/csv/xlsx
         """
-        outformat2 = outformat
-        if outformat in ("csv", "xlsx"):
-            outformat2 = "df"
-        functions1 = self.list_objects(
-            "functions", verbosity=verbosity, outformat=outformat2
-        )
-        pipelines1 = self.list_objects(
-            "pipelines", verbosity=verbosity, outformat=outformat2
-        )
-        alerts1 = self.list_objects("alerts", verbosity=verbosity, outformat=outformat2)
-        alerts_destinations1 = self.list_objects(
-            "alerts/destinations", verbosity=verbosity, outformat=outformat2
-        )
-        alerts_templates1 = self.list_objects(
-            "alerts/templates", verbosity=verbosity, outformat=outformat2
-        )
-        dashboards1 = self.list_objects(
-            "dashboards", verbosity=verbosity, outformat=outformat2
-        )
-        streams1 = self.list_objects(
-            "streams", verbosity=verbosity, outformat=outformat2
-        )
-        users1 = self.list_objects("users", verbosity=verbosity, outformat=outformat2)
-        if outformat == "csv":
-            functions1.to_csv(f"{file_path}functions.csv")
-            pipelines1.to_csv(f"{file_path}pipelines.csv")
-            alerts1.to_csv(f"{file_path}alerts.csv")
-            alerts_destinations1.to_csv(f"{file_path}alerts-destinations.csv")
-            alerts_templates1.to_csv(f"{file_path}alerts-templates.csv")
-            dashboards1.to_csv(f"{file_path}dashboards.csv")
-            streams1.to_csv(f"{file_path}streams.csv")
-            users1.to_csv(f"{file_path}users.csv")
-        elif outformat == "xlsx":
-            functions1.to_excel(f"{file_path}functions.xlsx")
-            pipelines1.to_excel(f"{file_path}pipelines.xlsx")
-            alerts1.to_excel(f"{file_path}alerts.xlsx")
-            alerts_destinations1.to_excel(f"{file_path}alerts-destinations.xlsx")
-            alerts_templates1.to_excel(f"{file_path}alerts-templates.xlsx")
-            dashboards1.to_excel(f"{file_path}dashboards.xlsx")
-            streams1.to_excel(f"{file_path}streams.xlsx")
-            users1.to_excel(f"{file_path}users.xlsx")
-        elif split is True and flat is False:
-            # split json
-            self.export_objects_split(
-                "functions", functions1, file_path, verbosity=verbosity
-            )
-            self.export_objects_split(
-                "pipelines", pipelines1, file_path, verbosity=verbosity
-            )
-            self.export_objects_split("alerts", alerts1, file_path, verbosity=verbosity)
-            self.export_objects_split(
-                "alerts/destinations",
-                alerts_destinations1,
-                file_path,
-                verbosity=verbosity,
-            )
-            self.export_objects_split(
-                "alerts/templates", alerts_templates1, file_path, verbosity=verbosity
-            )
-            self.export_objects_split(
-                "dashboards", dashboards1, file_path, verbosity=verbosity
-            )
-            self.export_objects_split(
-                "streams", streams1, file_path, verbosity=verbosity
-            )
-            self.export_objects_split("users", users1, file_path, verbosity=verbosity)
-        elif split is True and flat is True:
-            print("FIXME! Not implemented")
-            sys.exit(1)
-        else:
+        if outformat == "json":
             # default json
-            with open(f"{file_path}functions.json", "w", encoding="utf-8") as f:
-                json.dump(functions1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}pipelines.json", "w", encoding="utf-8") as f:
-                json.dump(pipelines1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}alerts.json", "w", encoding="utf-8") as f:
-                json.dump(alerts1, f, ensure_ascii=False, indent=4)
-            with open(
-                f"{file_path}alerts-destinations.json", "w", encoding="utf-8"
-            ) as f:
-                json.dump(alerts_destinations1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}alerts-templates.json", "w", encoding="utf-8") as f:
-                json.dump(alerts_templates1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}dashboards.json", "w", encoding="utf-8") as f:
-                json.dump(dashboards1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}streams.json", "w", encoding="utf-8") as f:
-                json.dump(streams1, f, ensure_ascii=False, indent=4)
-            with open(f"{file_path}users.json", "w", encoding="utf-8") as f:
-                json.dump(users1, f, ensure_ascii=False, indent=4)
+            functions1 = self.list_objects("functions", verbosity=verbosity)
+            pipelines1 = self.list_objects("pipelines", verbosity=verbosity)
+            alerts1 = self.list_objects("alerts", verbosity=verbosity)
+            alerts_destinations1 = self.list_objects(
+                "alerts/destinations", verbosity=verbosity
+            )
+            alerts_templates1 = self.list_objects(
+                "alerts/templates", verbosity=verbosity
+            )
+            dashboards1 = self.list_objects("dashboards", verbosity=verbosity)
+            streams1 = self.list_objects("streams", verbosity=verbosity)
+            users1 = self.list_objects("users", verbosity=verbosity)
+
+            if split is True and flat is False:
+                # split json
+                self.export_objects_split(
+                    "functions", functions1, file_path, verbosity=verbosity
+                )
+                self.export_objects_split(
+                    "pipelines", pipelines1, file_path, verbosity=verbosity
+                )
+                self.export_objects_split(
+                    "alerts", alerts1, file_path, verbosity=verbosity
+                )
+                self.export_objects_split(
+                    "alerts/destinations",
+                    alerts_destinations1,
+                    file_path,
+                    verbosity=verbosity,
+                )
+                self.export_objects_split(
+                    "alerts/templates",
+                    alerts_templates1,
+                    file_path,
+                    verbosity=verbosity,
+                )
+                self.export_objects_split(
+                    "dashboards", dashboards1, file_path, verbosity=verbosity
+                )
+                self.export_objects_split(
+                    "streams", streams1, file_path, verbosity=verbosity
+                )
+                self.export_objects_split(
+                    "users", users1, file_path, verbosity=verbosity
+                )
+            elif split is True and flat is True:
+                print("FIXME! Not implemented")
+                sys.exit(1)
+            else:
+                # default json
+                with open(f"{file_path}functions.json", "w", encoding="utf-8") as f:
+                    json.dump(functions1, f, ensure_ascii=False, indent=4)
+                with open(f"{file_path}pipelines.json", "w", encoding="utf-8") as f:
+                    json.dump(pipelines1, f, ensure_ascii=False, indent=4)
+                with open(f"{file_path}alerts.json", "w", encoding="utf-8") as f:
+                    json.dump(alerts1, f, ensure_ascii=False, indent=4)
+                with open(
+                    f"{file_path}alerts-destinations.json", "w", encoding="utf-8"
+                ) as f:
+                    json.dump(alerts_destinations1, f, ensure_ascii=False, indent=4)
+                with open(
+                    f"{file_path}alerts-templates.json", "w", encoding="utf-8"
+                ) as f:
+                    json.dump(alerts_templates1, f, ensure_ascii=False, indent=4)
+                with open(f"{file_path}dashboards.json", "w", encoding="utf-8") as f:
+                    json.dump(dashboards1, f, ensure_ascii=False, indent=4)
+                with open(f"{file_path}streams.json", "w", encoding="utf-8") as f:
+                    json.dump(streams1, f, ensure_ascii=False, indent=4)
+                with open(f"{file_path}users.json", "w", encoding="utf-8") as f:
+                    json.dump(users1, f, ensure_ascii=False, indent=4)
+
+        elif outformat in ("csv", "xlsx"):
+
+            df_functions1 = self.list_objects2df("functions", verbosity=verbosity)
+            df_pipelines1 = self.list_objects2df("pipelines", verbosity=verbosity)
+            df_alerts1 = self.list_objects2df("alerts", verbosity=verbosity)
+            df_alerts_destinations1 = self.list_objects2df(
+                "alerts/destinations", verbosity=verbosity
+            )
+            df_alerts_templates1 = self.list_objects2df(
+                "alerts/templates", verbosity=verbosity
+            )
+            df_dashboards1 = self.list_objects2df("dashboards", verbosity=verbosity)
+            df_streams1 = self.list_objects2df("streams", verbosity=verbosity)
+            df_users1 = self.list_objects2df("users", verbosity=verbosity)
+
+            if outformat == "csv":
+                df_functions1.to_csv(f"{file_path}functions.csv")
+                df_pipelines1.to_csv(f"{file_path}pipelines.csv")
+                df_alerts1.to_csv(f"{file_path}alerts.csv")
+                df_alerts_destinations1.to_csv(f"{file_path}alerts-destinations.csv")
+                df_alerts_templates1.to_csv(f"{file_path}alerts-templates.csv")
+                df_dashboards1.to_csv(f"{file_path}dashboards.csv")
+                df_streams1.to_csv(f"{file_path}streams.csv")
+                df_users1.to_csv(f"{file_path}users.csv")
+            elif outformat == "xlsx":
+                df_functions1.to_excel(f"{file_path}functions.xlsx")
+                df_pipelines1.to_excel(f"{file_path}pipelines.xlsx")
+                df_alerts1.to_excel(f"{file_path}alerts.xlsx")
+                df_alerts_destinations1.to_excel(f"{file_path}alerts-destinations.xlsx")
+                df_alerts_templates1.to_excel(f"{file_path}alerts-templates.xlsx")
+                df_dashboards1.to_excel(f"{file_path}dashboards.xlsx")
+                df_streams1.to_excel(f"{file_path}streams.xlsx")
+                df_users1.to_excel(f"{file_path}users.xlsx")
+
+        pprint("Unknown outformat requested")
 
     def create_function(self, function_json: dict, verbosity: int = 0):
         """
@@ -552,20 +597,10 @@ class OpenObserve:
                         return res
         return True
 
-    def list_objects(
-        self, object_type: str, verbosity: int = 0, outformat: str = "json"
-    ):
+    def list_objects(self, object_type: str, verbosity: int = 0) -> List[Dict]:
         """
         List available objects for given type
         """
-        key: Union[str, int]
-        key = "list"
-        if object_type == "dashboards":
-            key = "dashboards"
-        if object_type == "users":
-            key = "data"
-        if object_type in ("alerts/destinations", "alerts/templates"):
-            key = 0
         url = self.openobserve_url.replace("[STREAM]", f"{object_type}")
         res = requests.get(
             url, headers=self.headers, verify=self.verify, timeout=self.timeout
@@ -576,12 +611,30 @@ class OpenObserve:
             pprint(res)
         if res.status_code != requests.codes.ok:
             raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res = res.json()
-        if outformat == "df" and HAVE_MODULE_PANDAS:
-            return pandas.json_normalize(res[key])
-        return res
+        res_json = res.json()
+        return res_json
 
-    def create_object(self, object_type: str, object_json: dict, verbosity: int = 0):
+    def list_objects2df(self, object_type: str, verbosity: int = 0) -> pandas.DataFrame:
+        """
+        List available objects for given type
+        Output: Dataframe
+        """
+        key: Union[str, int]
+        key = "list"
+        if object_type == "dashboards":
+            key = "dashboards"
+        if object_type == "users":
+            key = "data"
+        if object_type in ("alerts/destinations", "alerts/templates"):
+            key = 0
+
+        res_json = self.list_objects(object_type=object_type, verbosity=verbosity)
+
+        return pandas.json_normalize(res_json[key])  # type: ignore[index]
+
+    def create_object(
+        self, object_type: str, object_json: dict, verbosity: int = 0
+    ) -> bool:
         """
         Create object
         """
@@ -606,7 +659,9 @@ class OpenObserve:
             pprint("Create object completed")
         return True
 
-    def update_object(self, object_type: str, object_json: dict, verbosity: int = 0):
+    def update_object(
+        self, object_type: str, object_json: dict, verbosity: int = 0
+    ) -> bool:
         """
         Update object
         """
@@ -642,7 +697,7 @@ class OpenObserve:
         *,
         overwrite: bool = False,
         verbosity: int = 0,
-    ):
+    ) -> bool:
         """
         Import OpenObserve configuration from split json files
         """
@@ -688,7 +743,7 @@ class OpenObserve:
         overwrite: bool = False,
         verbosity: int = 0,
         split: bool = False,
-    ):
+    ) -> bool:
         """
         Import objects from json
         Note: API does not import list of objects, need to do one by one.

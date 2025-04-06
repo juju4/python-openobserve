@@ -1,11 +1,12 @@
 """Pytest file for python-openobserve"""
 
 # pylint: disable=unused-argument,redefined-outer-name,missing-function-docstring,too-few-public-methods,no-else-return,duplicate-code
+# type: ignore[import-not-found]
 from datetime import datetime, timedelta
 from pprint import pprint
 from unittest.mock import patch
-import pytest
-import sqlglot
+import pytest  # type: ignore
+import sqlglot  # type: ignore
 import jmespath
 from python_openobserve.openobserve import OpenObserve
 
@@ -259,12 +260,11 @@ def test_search1_df(mock_post):
     sql = 'SELECT log_file_name,count(*) FROM "default" GROUP BY log_file_name'
     start_timeperiod = datetime.now() - timedelta(days=7)
     end_timeperiod = datetime.now()
-    df_search_results = oo_conn.search(
+    df_search_results = oo_conn.search2df(
         sql,
         start_time=start_timeperiod,
         end_time=end_timeperiod,
         verbosity=5,
-        outformat="df",
     )
     pprint(df_search_results)
     assert not df_search_results.empty
@@ -281,12 +281,11 @@ def test_search1_dftypes(mock_post):
     sql = 'SELECT _timestamp FROM "default" order by _timestamp desc limit 1'
     start_timeperiod = datetime.now() - timedelta(days=7)
     end_timeperiod = datetime.now()
-    df_search_results = oo_conn.search(
+    df_search_results = oo_conn.search2df(
         sql,
         start_time=start_timeperiod,
         end_time=end_timeperiod,
         verbosity=5,
-        outformat="df",
     )
     pprint(df_search_results)
     pprint(df_search_results.dtypes)
