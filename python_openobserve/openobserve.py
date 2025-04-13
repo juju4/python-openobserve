@@ -131,6 +131,7 @@ class OpenObserve:
         start_time: Union[datetime, int] = 0,
         end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
+        timeout: int = 300,
     ) -> List[Dict]:
         """
         OpenObserve search function
@@ -166,7 +167,7 @@ class OpenObserve:
             json=query,
             headers=self.headers,
             verify=self.verify,
-            timeout=self.timeout,
+            timeout=timeout,
         )
         if res.status_code != 200:
             raise Exception(
@@ -186,6 +187,7 @@ class OpenObserve:
         start_time: Union[datetime, int] = 0,
         end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
+        timeout: int = 300,
     ) -> pandas.DataFrame:
         """
         OpenObserve search function with df output
@@ -195,7 +197,11 @@ class OpenObserve:
 
         # FIXME! set type for _timestamp column
         res_json_hits = self.search(
-            sql, start_time=start_time, end_time=end_time, verbosity=verbosity
+            sql,
+            start_time=start_time,
+            end_time=end_time,
+            verbosity=verbosity,
+            timeout=timeout,
         )
         return pandas.json_normalize(res_json_hits)
 
