@@ -6,6 +6,7 @@ from pprint import pprint
 import pytest  # type: ignore
 import sqlglot  # type: ignore
 import jmespath
+import requests
 from dotenv import load_dotenv  # type: ignore
 from python_openobserve.openobserve import OpenObserve
 
@@ -33,6 +34,56 @@ def test_connection_settings():
     assert "OPENOBSERVE_URL" in os.environ
     assert "OPENOBSERVE_USER" in os.environ
     assert "OPENOBSERVE_PASS" in os.environ
+
+
+def test_connection_incorrect_params1():
+    """Ensure error if incorrect parameter"""
+    oo_conn = OpenObserve(host="invalid", user="***", password="")
+    with pytest.raises(
+        requests.exceptions.MissingSchema,
+        match="Invalid URL",
+    ):
+        oo_conn.list_objects("streams")
+
+
+def test_connection_incorrect_params2():
+    """Ensure error if incorrect parameter"""
+    oo_conn = OpenObserve(
+        host="invalid", user="invalid@example.com", password="", timeout=3
+    )
+    with pytest.raises(
+        requests.exceptions.MissingSchema,
+        match="Invalid URL",
+    ):
+        oo_conn.list_objects("streams")
+
+
+def test_connection_incorrect_params3():
+    """Ensure error if incorrect parameter"""
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"OpenObserve.__init__\(\) missing 2 required positional arguments:"
+            " 'user' and 'password'"
+        ),
+    ):
+        # pylint: disable=no-value-for-parameter
+        OpenObserve()
+
+
+def test_connection_incorrect_params4():
+    """Ensure error if incorrect parameter"""
+    oo_conn = OpenObserve(
+        host="https://nonexistent.example.com",
+        user="invalid@example.com",
+        password="",
+        timeout=3,
+    )
+    with pytest.raises(
+        Exception,
+        match="Max retries exceeded with url:",
+    ):
+        oo_conn.list_objects("streams")
 
 
 def test_list_object_streams():
@@ -106,7 +157,7 @@ def test_search1():
     """Ensure can do logs search (default stream)"""
     oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
     sql = 'SELECT log_file_name,count(*) FROM "default" GROUP BY log_file_name'
-    start_timeperiod = datetime.now() - timedelta(days=7)
+    start_timeperiod = datetime.now() - timedelta(days=2)
     end_timeperiod = datetime.now()
     search_results = oo_conn.search(
         sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
@@ -119,7 +170,7 @@ def test_search1_df():
     """Ensure can do logs search (default stream, dataframe output)"""
     oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
     sql = 'SELECT log_file_name,count(*) FROM "default" GROUP BY log_file_name'
-    start_timeperiod = datetime.now() - timedelta(days=7)
+    start_timeperiod = datetime.now() - timedelta(days=2)
     end_timeperiod = datetime.now()
     df_search_results = oo_conn.search2df(
         sql,
@@ -139,13 +190,27 @@ def test_search1_dftypes():
     """Ensure can do logs search (default stream, dataframe output, timestamp type)"""
     oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
     sql = 'SELECT _timestamp FROM "default" order by _timestamp desc limit 1'
-    start_timeperiod = datetime.now() - timedelta(days=7)
+    start_timeperiod = datetime.now() - timedelta(days=2)
     end_timeperiod = datetime.now()
     df_search_results = oo_conn.search2df(
         sql,
         start_time=start_timeperiod,
         end_time=end_timeperiod,
         verbosity=5,
+    )
+    pprint(df_search_results)
+    pprint(df_search_results.dtypes)
+    assert not df_search_results.empty
+    assert df_search_results.shape
+    assert not df_search_results.columns.empty
+    assert df_search_results["_timestamp"].dtypes == "int64"
+
+    df_search_results = oo_conn.search2df(
+        sql,
+        start_time=start_timeperiod,
+        end_time=end_timeperiod,
+        verbosity=5,
+        timestamp_conversion_auto=True,
     )
     pprint(df_search_results)
     pprint(df_search_results.dtypes)
@@ -259,3 +324,66 @@ def test_search_time_invalid2():
         oo_conn.search(
             sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=1
         )
+
+
+# fixed bug: failed attempt to convert journald field 'body___monotonic_timestamp',
+# 'body__runtime_scope', and kunai 'info_utc_time' from __intts2datetime just
+# detecting 'time' in key
+def test_search_time_conversion1(capsys):
+    """Repeat time conversion issue"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "SELECT * FROM \"kunai\" WHERE data_path LIKE '/etc/sudoers.d/%' LIMIT 1"
+    start_timeperiod = datetime.now() - timedelta(days=1)
+    end_timeperiod = datetime.now()
+
+    with pytest.raises(
+        UnboundLocalError,
+        match=(
+            "cannot access local variable 'timestamp_out' where "
+            "it is not associated with a value"
+        ),
+    ):
+        oo_conn.search(
+            sql,
+            start_time=start_timeperiod,
+            end_time=end_timeperiod,
+            verbosity=5,
+            timestamp_conversion_auto=True,
+        )
+        captured = capsys.readouterr()
+        assert "could not convert timestamp:" in captured.out
+
+
+def test_search_time_conversion2(capsys):
+    """Ensure no time conversion issue if no auto conversion"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "SELECT * FROM \"kunai\" WHERE data_path LIKE '/etc/sudoers.d/%' LIMIT 1"
+    start_timeperiod = datetime.now() - timedelta(days=1)
+    end_timeperiod = datetime.now()
+    oo_conn.search(
+        sql, start_time=start_timeperiod, end_time=end_timeperiod, verbosity=5
+    )
+    captured = capsys.readouterr()
+    assert "could not convert timestamp:" not in captured.out
+
+
+def test_search_time_conversion3(capsys):
+    """Ensure correct explicit time conversion with search2df()"""
+    oo_conn = OpenObserve(host=OO_HOST, user=OO_USER, password=OO_PASS)
+    sql = "SELECT * FROM \"kunai\" WHERE data_path LIKE '/etc/sudoers.d/%' LIMIT 1"
+    start_timeperiod = datetime.now() - timedelta(days=1)
+    end_timeperiod = datetime.now()
+    df_res = oo_conn.search2df(
+        sql,
+        start_time=start_timeperiod,
+        end_time=end_timeperiod,
+        verbosity=5,
+        timestamp_columns=["info_utc_time"],
+    )
+    captured = capsys.readouterr()
+    assert "could not convert timestamp:" not in captured.out
+    assert df_res["_timestamp"].dtypes == "datetime64[ns]"
+    assert df_res["info_utc_time"].dtypes == "datetime64[ns, UTC]"
+    # python Objects aka string
+    assert df_res["body___monotonic_timestamp"].dtypes == "O"
+    # assert df_res["body__runtime_scope"].dtypes == "O"

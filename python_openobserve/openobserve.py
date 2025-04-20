@@ -88,10 +88,17 @@ class OpenObserve:
             print("could not convert timestamp: " + str(timestamp))
         return timestamp_out
 
-    def __intts2datetime(self, flatdict: dict) -> dict:
-        for key, val in flatdict.items():
-            if "time" in key:
-                flatdict[key] = self.__unixTimestampConvert(val)
+    def __intts2datetime(
+        self, flatdict: dict, timestamp_columns: Union[List[str], None]
+    ) -> dict:
+        if timestamp_columns is None:
+            for key, val in flatdict.items():
+                if "time" in key:
+                    flatdict[key] = self.__unixTimestampConvert(val)
+        else:
+            for key, val in flatdict.items():
+                if key in timestamp_columns:
+                    flatdict[key] = self.__unixTimestampConvert(val)
         return flatdict
 
     # pylint: disable=invalid-name
@@ -132,6 +139,8 @@ class OpenObserve:
         end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
         timeout: int = 300,
+        timestamp_conversion_auto: bool = False,
+        timestamp_columns: Union[List[str], None] = None,
     ) -> List[Dict]:
         """
         OpenObserve search function
@@ -173,11 +182,12 @@ class OpenObserve:
             raise Exception(
                 f"Openobserve returned {res.status_code}. Text: {res.text}. url: {res.url}"
             )
-        # timestamp back convert
         res_hits = res.json()["hits"]
         if verbosity > 3:
             pprint(res_hits)
-        res_hits = [self.__intts2datetime(x) for x in res_hits]
+        if timestamp_conversion_auto or timestamp_columns is not None:
+            # timestamp back convert
+            res_hits = [self.__intts2datetime(x, timestamp_columns) for x in res_hits]
         return res_hits
 
     def search2df(
@@ -188,22 +198,40 @@ class OpenObserve:
         end_time: Union[datetime, int] = 0,
         verbosity: int = 0,
         timeout: int = 300,
+        timestamp_conversion_auto: bool = False,
+        timestamp_columns: Union[List[str], None] = None,
     ) -> pandas.DataFrame:
         """
         OpenObserve search function with df output
         https://openobserve.ai/docs/api/search/search/
         """
-        # timestamp back convert
-
-        # FIXME! set type for _timestamp column
         res_json_hits = self.search(
             sql,
             start_time=start_time,
             end_time=end_time,
             verbosity=verbosity,
             timeout=timeout,
+            timestamp_conversion_auto=timestamp_conversion_auto,
+            # leaving conversion to pandas
+            # timestamp_columns=timestamp_columns,
         )
-        return pandas.json_normalize(res_json_hits)
+        df_res = pandas.json_normalize(res_json_hits)
+
+        if timestamp_columns is not None:
+            for col in list(
+                set(df_res.columns) & set(["_timestamp"] + timestamp_columns)
+            ):
+                try:
+                    # ensure timestamp format
+                    if col in ["_timestamp"] + timestamp_columns:
+                        df_res[col] = pandas.to_datetime(df_res[col])
+                except Exception as err:
+                    raise Exception(
+                        err,
+                        "query",
+                        f"query column type conversion: {col} -> {df_res[col]}",
+                    ) from err
+        return df_res
 
     # pylint: disable=too-many-branches
     def export_objects_split(
