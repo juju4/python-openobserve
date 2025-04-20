@@ -7,10 +7,9 @@ import json
 # import glob
 import os
 import sys
-from pprint import pprint
 from datetime import datetime
 from collections.abc import MutableMapping
-from typing import List, Dict, Union, cast
+from typing import List, Dict, Union, Optional, Any, cast
 from pathlib import Path
 
 import requests
@@ -48,25 +47,43 @@ class OpenObserve:
 
     def __init__(
         self,
-        user,
-        password,
+        user: str,
+        password: str,
         *,
-        organisation="default",
-        host="http://localhost:5080",
-        verify=True,
-        timeout=10,
+        organisation: str = "default",
+        host: str = "http://localhost:5080",
+        verify: bool = True,
+        timeout: int = 10,
     ) -> None:
         bas64encoded_creds = base64.b64encode(
-            bytes(user + ":" + password, "utf-8")
+            f"{user}:{password}".encode("utf-8")
         ).decode("utf-8")
-        self.openobserve_url = host + "/api/" + organisation + "/" + "[STREAM]"
+        self.openobserve_url = f"{host}/api/{organisation}/[STREAM]"
         self.openobserve_host = host
         self.headers = {
             "Content-Type": "application/json",
-            "Authorization": "Basic " + bas64encoded_creds,
+            "Authorization": f"Basic {bas64encoded_creds}",
         }
         self.verify = verify
         self.timeout = timeout
+
+    def _debug(self, msg: Any, verbosity: int, level: int = 1) -> None:
+        """Print debug messages if verbosity level is sufficient"""
+        if verbosity >= level:
+            # pylint: disable=import-outside-toplevel
+            from pprint import pprint
+
+            pprint(msg)
+
+    def _handle_response(
+        self, res: requests.Response, action: str = "request"
+    ) -> List[Dict]:
+        """Handle API response and return JSON if successful"""
+        if res.status_code != requests.codes.ok:
+            raise Exception(
+                f"Openobserve {action} returned {res.status_code}. Text: {res.text}"
+            )
+        return res.json()
 
     # pylint: disable=invalid-name
     def __timestampConvert(self, timestamp: datetime, verbosity: int = 0) -> int:
@@ -82,11 +99,12 @@ class OpenObserve:
 
     # pylint: disable=invalid-name
     def __unixTimestampConvert(self, timestamp: int) -> datetime:
+        """Convert OpenObserve timestamp to Python datetime"""
         try:
-            timestamp_out = datetime.fromtimestamp(timestamp / 1000000)
+            return datetime.fromtimestamp(timestamp / 1000000)
         except:
-            print("could not convert timestamp: " + str(timestamp))
-        return timestamp_out
+            print(f"could not convert timestamp: {timestamp}")
+            return datetime.fromtimestamp(0)
 
     def __intts2datetime(
         self, flatdict: dict, timestamp_columns: Union[List[str], None]
@@ -103,33 +121,32 @@ class OpenObserve:
 
     # pylint: disable=invalid-name
     def __datetime2Str(self, flatdict: dict) -> dict:
+        """Convert datetime fields in dict to timestamp integers"""
         for key, val in flatdict.items():
             if isinstance(val, datetime):
                 flatdict[key] = self.__timestampConvert(val)
         return flatdict
 
-    # pylint: disable=(missing-function-docstring
-    def index(self, index: str, document: dict):
+    def index(self, index: str, document: dict) -> List[dict]:
+        """Index a document in OpenObserve"""
         assert isinstance(document, dict), "document must be a dict"
-        # expects a flattened json
-        document = flatten(document)
-        document = self.__datetime2Str(document)
+        document = self.__datetime2Str(flatten(document))
 
         res = requests.post(
-            self.openobserve_url.replace("[STREAM]", index) + "/_json",
+            f"{self.openobserve_url.replace('[STREAM]', index)}/_json",
             headers=self.headers,
             json=[document],
             verify=self.verify,
             timeout=self.timeout,
         )
-        if res.status_code != 200:
-            raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res_json = res.json()
-        if res_json["status"][0]["failed"] > 0:
+        response_json = self._handle_response(res, "index")
+
+        if response_json["status"][0]["failed"] > 0:
             raise Exception(
-                f"Openobserve index failed. {res_json['status'][0]['error']}. document: {document}"
+                "Openobserve index failed. "
+                f"{response_json['status'][0]['error']}. document: {document}"
             )
-        return res_json
+        return response_json
 
     def search(
         self,
@@ -142,53 +159,88 @@ class OpenObserve:
         timestamp_conversion_auto: bool = False,
         timestamp_columns: Union[List[str], None] = None,
     ) -> List[Dict]:
-        """
-        OpenObserve search function
-        https://openobserve.ai/docs/api/search/search/
-        """
+        """Execute a search query using SQL"""
+        # Convert datetime objects to timestamps if needed
         if isinstance(start_time, datetime):
-            # convert to unixtime
-            start_time = self.__timestampConvert(start_time, verbosity=verbosity)
+            start_time = self.__timestampConvert(start_time)
         elif not isinstance(start_time, int):
-            pprint("Error! start_time neither datetime, nor int")
-            raise Exception("Search invalid start_time input")
+            raise Exception(
+                "Search invalid start_time input, neither datetime, nor int"
+            )
         if isinstance(end_time, datetime):
-            # convert to unixtime
-            end_time = self.__timestampConvert(end_time, verbosity=verbosity)
-        elif not isinstance(start_time, int):
-            pprint("Error! end_time neither datetime, nor int")
-            raise Exception("Search invalid end_time input")
+            end_time = self.__timestampConvert(end_time)
+        elif not isinstance(end_time, int):
+            raise Exception("Search invalid end_time input, neither datetime, nor int")
 
-        if verbosity > 1:
-            pprint(f"Query Time start {start_time} end {end_time}")
+        self._debug(f"Query Time start {start_time} end {end_time}", verbosity, 1)
 
-        # verify sql
+        # Verify SQL syntax
         try:
             sqlglot.transpile(sql)
         except sqlglot.errors.ParseError as e:
             raise e
 
         query = {"query": {"sql": sql, "start_time": start_time, "end_time": end_time}}
-        if verbosity > 0:
-            pprint(query)
+        self._debug(query, verbosity)
+
         res = requests.post(
-            self.openobserve_url.replace("/[STREAM]", "") + "/_search",
+            f"{self.openobserve_url.replace('/[STREAM]', '')}/_search",
             json=query,
             headers=self.headers,
             verify=self.verify,
             timeout=timeout,
         )
-        if res.status_code != 200:
-            raise Exception(
-                f"Openobserve returned {res.status_code}. Text: {res.text}. url: {res.url}"
-            )
-        res_hits = res.json()["hits"]
-        if verbosity > 3:
-            pprint(res_hits)
+
+        response_json = self._handle_response(res, "search")
+        res_hits = response_json["hits"]
+        self._debug(res_hits, verbosity, 3)
+
         if timestamp_conversion_auto or timestamp_columns is not None:
             # timestamp back convert
             res_hits = [self.__intts2datetime(x, timestamp_columns) for x in res_hits]
         return res_hits
+
+    def _execute_api_request(
+        self,
+        endpoint: str,
+        *,
+        verbosity: int = 0,
+        method: str = "GET",
+        params: Optional[dict] = None,
+        json_data: Optional[dict] = None,
+    ) -> List[Dict]:
+        """Execute API request with proper error handling and debugging"""
+        url = self.openobserve_url.replace("[STREAM]", endpoint)
+        self._debug(url, verbosity)
+
+        if method == "GET":
+            res = requests.get(
+                url,
+                headers=self.headers,
+                params=params,
+                verify=self.verify,
+                timeout=self.timeout,
+            )
+        elif method == "POST":
+            res = requests.post(
+                url,
+                headers=self.headers,
+                json=json_data,
+                verify=self.verify,
+                timeout=self.timeout,
+            )
+        elif method == "PUT":
+            res = requests.put(
+                url,
+                headers=self.headers,
+                json=json_data,
+                verify=self.verify,
+                timeout=self.timeout,
+            )
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+        return self._handle_response(res, f"{method}_{endpoint.split('/')[0]}")
 
     def search2df(
         self,
@@ -254,33 +306,27 @@ class OpenObserve:
         if object_type == "users":
             key = "data"
             key2 = "email"
-        if verbosity > 3:
-            pprint(json_data)
+        self._debug(json_data, verbosity, 3)
         if flat is True:
             dst_path = f"{file_path}{object_type}-"
         else:
             dst_path = f"{file_path}{object_type}/"
             Path(dst_path).mkdir(parents=True, exist_ok=True)
         if object_type in ("alerts/destinations", "alerts/templates"):
-            if verbosity > 2:
-                pprint("json_list set to alerts type")
+            self._debug("json_list set to alerts type", verbosity, 2)
             json_list = cast(List[Dict], json_data)
         else:
             try:
                 json_list = cast(List[Dict], json_data[key])  # type: ignore[call-overload]
-                if verbosity > 2:
-                    pprint(f"json_list set to key {key}")
-                    pprint(json_list)
+                self._debug(f"json_list set to key {key}: {json_list}", verbosity, 2)
             except:
                 json_list = cast(List[Dict], [json_data])
-                if verbosity > 2:
-                    pprint("json_list set to array")
-                    pprint(json_list)
+                self._debug(f"json_list set to array: {json_list}", verbosity, 2)
         for json_object in json_list:
-            if verbosity > 0:
-                pprint(f"Export json {object_type} {json_object[key2]}...")
-            if verbosity > 2:
-                pprint(json_object)
+            self._debug(
+                f"Export json {object_type} {json_object[key2]}...", verbosity, 0
+            )
+            self._debug(f"json {json_object}", verbosity, 2)
             try:
                 with open(
                     f"{dst_path}{json_object[key2]}.json",
@@ -289,10 +335,37 @@ class OpenObserve:
                 ) as f:
                     json.dump(json_object, f, ensure_ascii=False, indent=4)
             except Exception as err:
-                pprint(f"Exception on json {object_type} {json_object[key2]}: {err}.")
+                self._debug(
+                    f"Exception on json {object_type} {json_object[key2]}: {err}.",
+                    verbosity,
+                    0,
+                )
         return True
 
-    # pylint: disable=too-many-locals,too-many-statements
+    def list_objects(self, object_type: str, verbosity: int = 0) -> List[Dict]:
+        """List available objects for given type"""
+
+        response_json = self._execute_api_request(object_type, verbosity=verbosity)
+
+        return response_json
+
+    def list_objects2df(self, object_type: str, verbosity: int = 0) -> pandas.DataFrame:
+        """
+        List available objects for given type
+        Output: Dataframe
+        """
+        key_mapping = {
+            "dashboards": "dashboards",
+            "users": "data",
+            "alerts/destinations": 0,
+            "alerts/templates": 0,
+        }
+        key = key_mapping.get(object_type, "list")
+
+        res_json = self.list_objects(object_type=object_type, verbosity=verbosity)
+
+        return pandas.json_normalize(res_json[key])  # type: ignore[index]
+
     def config_export(
         self,
         file_path: str,
@@ -302,164 +375,65 @@ class OpenObserve:
         split: bool = False,
         flat: bool = False,
     ):
-        """
-        Export OpenObserve configuration to json/csv/xlsx
-        """
-        if outformat == "json":
-            # default json
-            functions1 = self.list_objects("functions", verbosity=verbosity)
-            pipelines1 = self.list_objects("pipelines", verbosity=verbosity)
-            alerts1 = self.list_objects("alerts", verbosity=verbosity)
-            alerts_destinations1 = self.list_objects(
-                "alerts/destinations", verbosity=verbosity
-            )
-            alerts_templates1 = self.list_objects(
-                "alerts/templates", verbosity=verbosity
-            )
-            dashboards1 = self.list_objects("dashboards", verbosity=verbosity)
-            streams1 = self.list_objects("streams", verbosity=verbosity)
-            users1 = self.list_objects("users", verbosity=verbosity)
+        """Export OpenObserve configuration to json/csv/xlsx"""
+
+        # Collect all configuration data
+        object_types = {
+            "functions": "functions",
+            "pipelines": "pipelines",
+            "alerts": "alerts",
+            "alerts-destinations": "alerts/destinations",
+            "alerts-templates": "alerts/templates",
+            "dashboards": "dashboards",
+            "streams": "streams",
+            "users": "users",
+        }
+        if outformat in ("csv", "xlsx"):
+            # Collect all data
+            data = {
+                name: self.list_objects2df(api_path, verbosity=verbosity)
+                for name, api_path in object_types.items()
+            }
+
+            # Export based on format
+            if outformat == "csv":
+                for name, df in data.items():
+                    df.to_csv(f"{file_path}{name}.csv")
+            elif outformat == "xlsx":
+                for name, df in data.items():
+                    df.to_excel(f"{file_path}{name}.xlsx")
+        else:  # default json
 
             if split is True and flat is False:
                 # split json
-                self.export_objects_split(
-                    "functions", functions1, file_path, verbosity=verbosity
-                )
-                self.export_objects_split(
-                    "pipelines", pipelines1, file_path, verbosity=verbosity
-                )
-                self.export_objects_split(
-                    "alerts", alerts1, file_path, verbosity=verbosity
-                )
-                self.export_objects_split(
-                    "alerts/destinations",
-                    alerts_destinations1,
-                    file_path,
-                    verbosity=verbosity,
-                )
-                self.export_objects_split(
-                    "alerts/templates",
-                    alerts_templates1,
-                    file_path,
-                    verbosity=verbosity,
-                )
-                self.export_objects_split(
-                    "dashboards", dashboards1, file_path, verbosity=verbosity
-                )
-                self.export_objects_split(
-                    "streams", streams1, file_path, verbosity=verbosity
-                )
-                self.export_objects_split(
-                    "users", users1, file_path, verbosity=verbosity
-                )
+                data = {
+                    name: [api_path, self.list_objects(api_path, verbosity=verbosity)]
+                    for name, api_path in object_types.items()
+                }
+
+                for name, object_data in data.items():
+                    self.export_objects_split(
+                        object_data[0], object_data[1], file_path, verbosity=verbosity
+                    )
             elif split is True and flat is True:
                 print("FIXME! Not implemented")
                 sys.exit(1)
             else:
-                # default json
-                with open(f"{file_path}functions.json", "w", encoding="utf-8") as f:
-                    json.dump(functions1, f, ensure_ascii=False, indent=4)
-                with open(f"{file_path}pipelines.json", "w", encoding="utf-8") as f:
-                    json.dump(pipelines1, f, ensure_ascii=False, indent=4)
-                with open(f"{file_path}alerts.json", "w", encoding="utf-8") as f:
-                    json.dump(alerts1, f, ensure_ascii=False, indent=4)
-                with open(
-                    f"{file_path}alerts-destinations.json", "w", encoding="utf-8"
-                ) as f:
-                    json.dump(alerts_destinations1, f, ensure_ascii=False, indent=4)
-                with open(
-                    f"{file_path}alerts-templates.json", "w", encoding="utf-8"
-                ) as f:
-                    json.dump(alerts_templates1, f, ensure_ascii=False, indent=4)
-                with open(f"{file_path}dashboards.json", "w", encoding="utf-8") as f:
-                    json.dump(dashboards1, f, ensure_ascii=False, indent=4)
-                with open(f"{file_path}streams.json", "w", encoding="utf-8") as f:
-                    json.dump(streams1, f, ensure_ascii=False, indent=4)
-                with open(f"{file_path}users.json", "w", encoding="utf-8") as f:
-                    json.dump(users1, f, ensure_ascii=False, indent=4)
+                data = {
+                    name: self.list_objects(api_path, verbosity=verbosity)
+                    for name, api_path in object_types.items()
+                }
 
-        elif outformat in ("csv", "xlsx"):
+                for name, object_data in data.items():
+                    with open(f"{file_path}{name}.json", "w", encoding="utf-8") as f:
+                        json.dump(object_data, f, ensure_ascii=False, indent=4)
 
-            df_functions1 = self.list_objects2df("functions", verbosity=verbosity)
-            df_pipelines1 = self.list_objects2df("pipelines", verbosity=verbosity)
-            df_alerts1 = self.list_objects2df("alerts", verbosity=verbosity)
-            df_alerts_destinations1 = self.list_objects2df(
-                "alerts/destinations", verbosity=verbosity
-            )
-            df_alerts_templates1 = self.list_objects2df(
-                "alerts/templates", verbosity=verbosity
-            )
-            df_dashboards1 = self.list_objects2df("dashboards", verbosity=verbosity)
-            df_streams1 = self.list_objects2df("streams", verbosity=verbosity)
-            df_users1 = self.list_objects2df("users", verbosity=verbosity)
+    def create_object(self, object_type: str, object_json: dict, verbosity: int = 0):
+        """Create object"""
+        url = self.openobserve_url.replace("[STREAM]", object_type)
+        self._debug(f"Create object {object_type} url: {url}", verbosity, level=1)
+        self._debug(f"Create object json input: {object_json}", verbosity, level=2)
 
-            if outformat == "csv":
-                df_functions1.to_csv(f"{file_path}functions.csv")
-                df_pipelines1.to_csv(f"{file_path}pipelines.csv")
-                df_alerts1.to_csv(f"{file_path}alerts.csv")
-                df_alerts_destinations1.to_csv(f"{file_path}alerts-destinations.csv")
-                df_alerts_templates1.to_csv(f"{file_path}alerts-templates.csv")
-                df_dashboards1.to_csv(f"{file_path}dashboards.csv")
-                df_streams1.to_csv(f"{file_path}streams.csv")
-                df_users1.to_csv(f"{file_path}users.csv")
-            elif outformat == "xlsx":
-                df_functions1.to_excel(f"{file_path}functions.xlsx")
-                df_pipelines1.to_excel(f"{file_path}pipelines.xlsx")
-                df_alerts1.to_excel(f"{file_path}alerts.xlsx")
-                df_alerts_destinations1.to_excel(f"{file_path}alerts-destinations.xlsx")
-                df_alerts_templates1.to_excel(f"{file_path}alerts-templates.xlsx")
-                df_dashboards1.to_excel(f"{file_path}dashboards.xlsx")
-                df_streams1.to_excel(f"{file_path}streams.xlsx")
-                df_users1.to_excel(f"{file_path}users.xlsx")
-
-        pprint("Unknown outformat requested")
-
-    def list_objects(self, object_type: str, verbosity: int = 0) -> List[Dict]:
-        """
-        List available objects for given type
-        """
-        url = self.openobserve_url.replace("[STREAM]", f"{object_type}")
-        res = requests.get(
-            url, headers=self.headers, verify=self.verify, timeout=self.timeout
-        )
-        if verbosity > 0:
-            pprint(url)
-        if verbosity > 3:
-            pprint(res)
-        if res.status_code != requests.codes.ok:
-            raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-        res_json = res.json()
-        return res_json
-
-    def list_objects2df(self, object_type: str, verbosity: int = 0) -> pandas.DataFrame:
-        """
-        List available objects for given type
-        Output: Dataframe
-        """
-        key: Union[str, int]
-        key = "list"
-        if object_type == "dashboards":
-            key = "dashboards"
-        if object_type == "users":
-            key = "data"
-        if object_type in ("alerts/destinations", "alerts/templates"):
-            key = 0
-
-        res_json = self.list_objects(object_type=object_type, verbosity=verbosity)
-
-        return pandas.json_normalize(res_json[key])  # type: ignore[index]
-
-    def create_object(
-        self, object_type: str, object_json: dict, verbosity: int = 0
-    ) -> bool:
-        """
-        Create object
-        """
-        url = self.openobserve_url.replace("[STREAM]", f"{object_type}")
-        if verbosity > 1:
-            pprint(f"Create object {object_type} url: {url}")
-        if verbosity > 2:
-            pprint(f"Create object json input: {object_json}")
         res = requests.post(
             url,
             json=object_json,
@@ -467,28 +441,20 @@ class OpenObserve:
             verify=self.verify,
             timeout=self.timeout,
         )
-        if verbosity > 1:
-            pprint(f"Return {res.status_code}. Text: {res.text}")
-        if res.status_code != requests.codes.ok:
-            pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
-            return False
-        if verbosity > 0:
-            pprint("Create object completed")
+        self._debug(f"Return {res.status_code}. Text: {res.text}", verbosity, level=1)
+        self._handle_response(res, f"create_object_{object_type}")
+
+        self._debug("Create object completed", verbosity)
         return True
 
-    def update_object(
-        self, object_type: str, object_json: dict, verbosity: int = 0
-    ) -> bool:
-        """
-        Update object
-        """
+    def update_object(self, object_type: str, object_json: dict, verbosity: int = 0):
+        """Update object"""
         url = self.openobserve_url.replace(
             "[STREAM]", f"{object_type}/{object_json['name']}"
         )
-        if verbosity > 1:
-            pprint(f"Update object {object_type} url: {url}")
-        if verbosity > 2:
-            pprint(f"Update object json input: {object_json}")
+        self._debug(f"Update object {object_type} url: {url}", verbosity, level=1)
+        self._debug(f"Update object json input: {object_json}", verbosity, level=2)
+
         res = requests.put(
             url,
             json=object_json,
@@ -496,14 +462,10 @@ class OpenObserve:
             verify=self.verify,
             timeout=self.timeout,
         )
-        if verbosity > 3:
-            pprint(f"Return {res.status_code}. Text: {res.text}")
-        if res.status_code != requests.codes.ok:
-            raise Exception(f"Openobserve returned {res.status_code}. Text: {res.text}")
-            # pprint(f"Openobserve returned {res.status_code}. Text: {res.text}")
-            # return False
-        if verbosity > 0:
-            pprint("Update object completed")
+        self._debug(f"Return {res.status_code}. Text: {res.text}", verbosity, level=3)
+        self._handle_response(res, f"update_object_{object_type}")
+
+        self._debug("Update object completed", verbosity)
         return True
 
     def import_objects_split(
@@ -524,34 +486,45 @@ class OpenObserve:
         file = Path(file_path)
         if (json_data is None or not json_data) and file.exists():
             with open(file_path, "r", encoding="utf-8") as json_file:
-                pprint(f"Load json data to import from file {file_path}")
+                self._debug(
+                    f"Load json data to import from file {file_path}",
+                    verbosity,
+                    level=0,
+                )
                 json_data = json.loads(json_file.read())
         elif json_data is None:
-            pprint(
-                "Fatal! import_objects_split(): input json_data None and file_path not exist"
+            self._debug(
+                "Fatal! import_objects_split(): input json_data None and file_path not exist",
+                verbosity,
+                level=0,
             )
             return False
-        if verbosity > 3:
-            pprint(json_data)
-        if verbosity > 0:
-            pprint(f"Try to create {object_type} {json_data[key2]}...")
+        self._debug(f"json_data: {json_data}", verbosity, level=3)
+        self._debug(
+            f"Try to create {object_type} {json_data[key2]}...", verbosity, level=0
+        )
         try:
             res = self.create_object(object_type, json_data, verbosity=verbosity)
-            pprint(f"Create returns {res}.")
+            self._debug(f"Create returns {res}.", verbosity, level=0)
 
             if res:
                 return res
 
             if overwrite:
-                print(f"Overwrite enabled. Updating object {json_data[key2]}")
+                self._debug(
+                    f"Overwrite enabled. Updating object {json_data[key2]}",
+                    verbosity,
+                    level=0,
+                )
                 res = self.update_object(object_type, json_data, verbosity=verbosity)
-                pprint(f"Update returns {res}.")
+                self._debug(f"Update returns {res}.", verbosity, level=0)
                 return res
 
         except Exception as exc:
             raise Exception(f"Exception: {exc}") from exc
         return False
 
+    # pylint: disable=too-many-locals
     def import_objects(
         self,
         object_type: str,
@@ -561,20 +534,29 @@ class OpenObserve:
         verbosity: int = 0,
         split: bool = False,
     ) -> bool:
-        """
-        Import objects from json
+        """Import objects from json file
         Note: API does not import list of objects, need to do one by one.
         FIXME! dashboards are always imported as new creating duplicates. no idempotence.
         """
+        # Determine key mappings based on object type
+        key_mappings = {
+            "dashboards": ("dashboards", "dashboardId"),
+            "users": ("data", "email"),
+            "alerts/destinations": (None, "name"),
+            "alerts/templates": (None, "name"),
+        }
+        list_key, id_key = key_mappings.get(object_type, ("list", "name"))
+
         if split is True:
-            pprint(f"import_objects: search files in {file_path}")
+            self._debug(
+                f"import_objects: search files in {file_path}", verbosity, level=2
+            )
             # functions
             # for file in glob.iglob(file_path + "functions/*.json"):
             for file in os.listdir(f"{file_path}"):
                 if not file.endswith(".json"):
                     continue
-                if verbosity > 1:
-                    pprint(f"import_objects: file {file}")
+                self._debug(f"import_objects: file {file}", verbosity, level=1)
                 self.import_objects_split(
                     object_type,
                     {},
@@ -584,30 +566,40 @@ class OpenObserve:
                 )
             return True
 
-        key = "list"
-        if object_type == "dashboards":
-            key = "dashboards"
-        if object_type == "users":
-            key = "data"
         with open(file_path, "r", encoding="utf-8") as json_file:
-            json_data = json.loads(json_file.read())
-            if verbosity > 3:
-                pprint(json_data)
-            if object_type in ("alerts/destinations", "alerts/templates"):
+            json_data = json.load(json_file)
+            self._debug(json_data, verbosity, level=3)
+
+            # Handle special cases or use standard list extraction
+            if object_type in ["alerts/destinations", "alerts/templates"]:
                 json_list = json_data
             else:
                 try:
-                    json_list = json_data[key]
+                    json_list = json_data[list_key] if list_key else [json_data]
                 except:
                     json_list = [json_data]
+
+            # Process each object
             for json_object in json_list:
-                self.import_objects_split(
-                    object_type,
-                    json_object,
-                    "",
-                    overwrite=overwrite,
-                    verbosity=verbosity,
-                )
+                object_id = json_object.get(id_key, "unknown")
+                self._debug(f"Try to create {object_type} {object_id}...", verbosity)
+                self._debug(json_object, verbosity, level=2)
+
+                try:
+                    res = self.create_object(
+                        object_type, json_object, verbosity=verbosity
+                    )
+                    self._debug(f"Create returns {res}.", verbosity)
+                    return res
+                except Exception:
+                    if overwrite and "name" in json_object:
+                        print(
+                            f"Overwrite enabled. Updating object {json_object['name']}"
+                        )
+                        res = self.update_object(
+                            object_type, json_object, verbosity=verbosity
+                        )
+                        self._debug(f"Update returns {res}.", verbosity)
         return True
 
     def config_import(
@@ -619,94 +611,52 @@ class OpenObserve:
         verbosity: int = 0,
         split: bool = False,
     ):
-        """
-        Import OpenObserve configuration from json
-        object_type all does everything
-        """
+        """Import OpenObserve configuration from json files"""
+
         if object_type == "all" and split is True:
-            self.import_objects(
+            importable_types = [
                 "functions",
-                f"{file_path}functions",
-                overwrite=overwrite,
-                verbosity=verbosity,
-                split=split,
-            )
-            self.import_objects(
                 "pipelines",
-                f"{file_path}pipelines",
-                overwrite=overwrite,
-                verbosity=verbosity,
-                split=split,
-            )
-            # FIXME! Return 404. Text:
-            # self.import_objects(
-            #     "alerts", f"{file_path}alerts", overwrite=overwrite, verbosity=verbosity, split
-            # )
-            # FIXME! ('Return 400. Text: {"code":400,
-            #     "message":"Email destination must have SMTP ' 'configured"}')
-            # self.import_objects(
-            #     "alerts/destinations",
-            #     f"{file_path}alerts/destinations",
-            #     overwrite=overwrite,
-            #     verbosity=verbosity,
-            #     split=split,
-            # )
-            self.import_objects(
-                "alerts/templates",
-                f"{file_path}alerts/templates",
-                overwrite=overwrite,
-                verbosity=verbosity,
-                split=split,
-            )
-            self.import_objects(
-                "dashboards",
-                f"{file_path}dashboards",
-                overwrite=overwrite,
-                verbosity=verbosity,
-                split=split,
-            )
-        elif object_type == "all":
-            self.import_objects(
-                "functions",
-                f"{file_path}functions.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            self.import_objects(
-                "pipelines",
-                f"{file_path}pipelines.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            self.import_objects(
                 "alerts",
-                f"{file_path}alerts.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            self.import_objects(
                 "alerts/destinations",
-                f"{file_path}alerts-destinations.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            self.import_objects(
                 "alerts/templates",
-                f"{file_path}alerts-templates.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            self.import_objects(
                 "dashboards",
-                f"{file_path}dashboards.json",
-                overwrite=overwrite,
-                verbosity=verbosity,
-            )
-            # No CreateStream, only CreateStreamSettings
-            # self.import_objects('streams', f"{file_path}streams.json", overwrite, verbosity)
-            # "Return 400. Text:
-            #     Json deserialize error: missing field `password` at line 1" = Extra field required
-            # self.import_objects('users', f"{file_path}users.json", overwrite, verbosity)
+                # 'streams' and 'users' are not supported by the API
+                # No CreateStream, only CreateStreamSettings
+                # self.import_objects('streams', f"{file_path}streams.json", overwrite, verbosity)
+                # "Return 400. Text:
+                # Json deserialize error: missing field `password` at line 1" = Extra field required
+                # self.import_objects('users', f"{file_path}users.json", overwrite, verbosity)
+            ]
+
+            for item in importable_types:
+                file_suffix = item.replace("/", "-")
+                self.import_objects(
+                    item,
+                    f"{file_path}{item}",
+                    overwrite=overwrite,
+                    verbosity=verbosity,
+                    split=split,
+                )
+
+        elif object_type == "all":
+            importable_types = [
+                "functions",
+                "pipelines",
+                "alerts",
+                "alerts/destinations",
+                "alerts/templates",
+                "dashboards",
+            ]
+
+            for item in importable_types:
+                file_suffix = item.replace("/", "-")
+                self.import_objects(
+                    item,
+                    f"{file_path}{file_suffix}.json",
+                    overwrite=overwrite,
+                    verbosity=verbosity,
+                )
         else:
             self.import_objects(
                 object_type, file_path, overwrite=overwrite, verbosity=verbosity
