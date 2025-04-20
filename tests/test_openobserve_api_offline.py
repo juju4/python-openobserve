@@ -512,8 +512,10 @@ def test_search_time_conversion1(mock_post_kunai, capsys):
     with pytest.raises(
         UnboundLocalError,
         match=(
-            "cannot access local variable 'timestamp_out' where "
-            "it is not associated with a value"
+            # different message between python 3.9 and 3.11+
+            r"(cannot access local variable 'timestamp_out' where "
+            "it is not associated with a value|"
+            "local variable 'timestamp_out' referenced before assignment)"
         ),
     ):
         oo_conn.search(
