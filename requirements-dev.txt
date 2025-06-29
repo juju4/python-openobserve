@@ -1,6 +1,7 @@
 fireducks==1.2.8
 guarddog==2.6.0
 jmespath==1.0.1
+memray==1.17.2
 mypy==1.15.0
 mypy-extensions==1.0.0
 pandas==2.2.3
