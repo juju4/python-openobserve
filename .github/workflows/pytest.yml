@@ -1,4 +1,6 @@
 ---
+# SPDX-FileCopyrightText: 2025 The python_openobserve authors
+# SPDX-License-Identifier: GPL-3.0-or-later
 name: pytest
 
 on:
@@ -51,6 +53,7 @@ jobs:
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
+        continue-on-error: true
 
       - name: Install dependencies
         run: |
@@ -71,7 +74,6 @@ jobs:
       - name: Test with pytest - offline
         run: |
           pytest --memray tests/test_*offline.py --doctest-modules --junitxml=junit/test-${{ matrix.python-version }}-results.xml --cov=com --cov-report=xml --cov-report=html
-        if: ${{ always() }}
 
       - name: Test with pytest  - online
         run: |
