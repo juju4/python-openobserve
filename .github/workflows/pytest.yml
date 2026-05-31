@@ -104,3 +104,23 @@ jobs:
           path: junit/test-${{ matrix.python-version }}-results.xml
         # Use always() to always run this step to publish test results when there are test failures
         if: ${{ always() }}
+
+      - name: Pipdeptree requirements-ansible
+        run: |
+          python3 -mvenv venv-ansible
+          . venv-ansible/bin/activate
+          pip install -r $GITHUB_WORKSPACE/requirements-ansible.txt
+          pip install pipdeptree
+          pipdeptree --reverse
+        if: ${{ always() }}
+        continue-on-error: true
+
+      - name: Pipdeptree requirements-dev
+        run: |
+          python3 -mvenv venv-dev
+          . venv-dev/bin/activate
+          pip install -r $GITHUB_WORKSPACE/requirements-dev.txt
+          pip install pipdeptree
+          pipdeptree --reverse
+        if: ${{ always() }}
+        continue-on-error: true
