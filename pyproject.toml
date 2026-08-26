@@ -55,7 +55,7 @@ ci = [
 docs = [
     "mkdocs==1.6.1",
     "mkdocs-material==9.7.7",
-    "mkdocstrings==0.30.1",
+    "mkdocstrings==1.0.6",
 ]
 tests = ["pytest==9.1.1", "jmespath==1.1.0", "python-dotenv==1.2.3"]
 pandas = ["pandas>=2.2"]
