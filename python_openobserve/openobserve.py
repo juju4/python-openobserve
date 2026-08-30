@@ -16,7 +16,7 @@ import os
 import sys
 import re
 from datetime import datetime
-from typing import List, Dict, Union, Optional, Any, cast
+from typing import List, Dict, Any, cast
 from pathlib import Path
 
 import httpx  # type: ignore
@@ -130,9 +130,9 @@ class OpenObserve:
           verify: validate certificate
           timeout: default http timeout
         """
-        bas64encoded_creds = base64.b64encode(
-            f"{user}:{password}".encode("utf-8")
-        ).decode("utf-8")
+        bas64encoded_creds = base64.b64encode(f"{user}:{password}".encode()).decode(
+            "utf-8"
+        )
         self.openobserve_url = f"{host}/api/{organisation}/[STREAM]"
         self.openobserve_host = host
         self.headers = {
@@ -152,7 +152,7 @@ class OpenObserve:
 
     def _handle_response(
         self, res: httpx.Response, action: str = "request"
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Handle API response and return JSON if successful"""
         if res.status_code != httpx.codes.OK:
             raise Exception(
@@ -181,7 +181,7 @@ class OpenObserve:
             return datetime.fromtimestamp(0)
 
     def __intts2datetime(
-        self, flatdict: dict, timestamp_columns: Union[List[str], None]
+        self, flatdict: dict, timestamp_columns: list[str] | None
     ) -> dict:
         if timestamp_columns is None:
             for key, val in flatdict.items():
@@ -201,7 +201,7 @@ class OpenObserve:
                 flatdict[key] = self.__timestampConvert(val)
         return flatdict
 
-    def index(self, index: str, document: dict) -> List[dict]:
+    def index(self, index: str, document: dict) -> list[dict]:
         """Index a document in OpenObserve"""
         assert isinstance(document, dict), "document must be a dict"
         document = self.__datetime2Str(flatten(document))
@@ -227,14 +227,14 @@ class OpenObserve:
         self,
         sql: str,
         *,
-        start_time: Union[datetime, int] = 0,
-        end_time: Union[datetime, int] = 0,
+        start_time: datetime | int = 0,
+        end_time: datetime | int = 0,
         query_size: int = 1000,
         verbosity: int = 0,
         timeout: int = 300,
         timestamp_conversion_auto: bool = False,
-        timestamp_columns: Union[List[str], None] = None,
-    ) -> List[Dict]:
+        timestamp_columns: list[str] | None = None,
+    ) -> list[dict]:
         """
         OpenObserve search function
         https://openobserve.ai/docs/api/search/search/
@@ -303,9 +303,9 @@ class OpenObserve:
         *,
         verbosity: int = 0,
         method: str = "GET",
-        params: Optional[dict] = None,
-        json_data: Optional[dict] = None,
-    ) -> List[Dict]:
+        params: dict | None = None,
+        json_data: dict | None = None,
+    ) -> list[dict]:
         """Execute API request with proper error handling and debugging"""
         url = self.openobserve_url.replace("[STREAM]", endpoint)
         if endpoint in ("alerts", "folders", "folders/alerts", "folders/dashboards"):
@@ -345,13 +345,13 @@ class OpenObserve:
         self,
         sql: str,
         *,
-        start_time: Union[datetime, int] = 0,
-        end_time: Union[datetime, int] = 0,
+        start_time: datetime | int = 0,
+        end_time: datetime | int = 0,
         query_size: int = 1000,
         verbosity: int = 0,
         timeout: int = 300,
         timestamp_conversion_auto: bool = False,
-        timestamp_columns: Union[List[str], None] = None,
+        timestamp_columns: list[str] | None = None,
     ) -> pandas.DataFrame:
         """
         OpenObserve search function with pandas dataframe output
@@ -399,12 +399,12 @@ class OpenObserve:
         self,
         sql: str,
         *,
-        start_time: Union[datetime, int] = 0,
-        end_time: Union[datetime, int] = 0,
+        start_time: datetime | int = 0,
+        end_time: datetime | int = 0,
         verbosity: int = 0,
         timeout: int = 300,
         timestamp_conversion_auto: bool = False,
-        timestamp_columns: Union[List[str], None] = None,
+        timestamp_columns: list[str] | None = None,
     ) -> polars.DataFrame:
         """
         OpenObserve search function with polars dataframe output
@@ -528,7 +528,7 @@ class OpenObserve:
                 )
         return True
 
-    def list_objects(self, object_type: str, verbosity: int = 0) -> List[Dict]:
+    def list_objects(self, object_type: str, verbosity: int = 0) -> list[dict]:
         """List available objects for given type"""
 
         response_json = self._execute_api_request(object_type, verbosity=verbosity)
@@ -550,10 +550,8 @@ class OpenObserve:
             return pandas.json_normalize(res_json[key])  # type: ignore[index,call-overload]
 
         raise Exception(
-            (
-                f"list_objects2df: can't normalize data {res_json} "
-                f"for object type {object_type} and key {key}"
-            )
+            f"list_objects2df: can't normalize data {res_json} "
+            f"for object type {object_type} and key {key}"
         )
 
     def config_export(
@@ -816,7 +814,7 @@ class OpenObserve:
         key2 = name_mapping.get(object_type, "name")
         file = Path(file_path)
         if (json_data is None or not json_data) and file.exists():
-            with open(file_path, "r", encoding="utf-8") as json_file:
+            with open(file_path, encoding="utf-8") as json_file:
                 self._debug(
                     f"Load json data to import from file {file_path}",
                     verbosity,
@@ -933,7 +931,7 @@ class OpenObserve:
                 )
             return True
 
-        with open(file_path, "r", encoding="utf-8") as json_file:
+        with open(file_path, encoding="utf-8") as json_file:
             json_data = json.load(json_file)
             self._debug(json_data, verbosity, level=3)
 

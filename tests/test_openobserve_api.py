@@ -200,7 +200,7 @@ def test_config_export_strip(tmpdir):
     oo_conn.config_export(f"{tmpdir}/", verbosity=0, split=True, strip=True)
     assert os.path.isdir(f"{tmpdir}/alerts")
     assert os.path.exists(f"{tmpdir}/streams/default.json")
-    with open(f"{tmpdir}/streams/default.json", "r", encoding="utf-8") as json_file:
+    with open(f"{tmpdir}/streams/default.json", encoding="utf-8") as json_file:
         json_data = json.loads(json_file.read())
         stats = jmespath.search("stats", json_data)
         assert not stats
