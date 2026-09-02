@@ -43,7 +43,7 @@ ci = [
     "jmespath==1.1.0",
     "memray==1.20.0",
     "pytest-memray==1.10.0",
-    "mypy==1.20.2",
+    "mypy==2.3.1",
     "mypy-extensions==1.1.0",
     "pandas==2.3.3",
     "pandas-stubs==2.3.3.260113",
