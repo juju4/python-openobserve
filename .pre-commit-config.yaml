@@ -27,11 +27,11 @@ repos:
       # - id: detect-aws-credentials
       - id: check-docstring-first
   - repo: https://github.com/psf/black
-    rev: 26.5.1
+    rev: 26.10.0
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/pylint
-    rev: v4.0.9
+    rev: v4.1.2
     hooks:
       - id: pylint
         additional_dependencies: ["httpx", "sqlglot", "pandas", "pytest", "jmespath", "python-dotenv", "polars", "hypothesis"]
@@ -42,7 +42,7 @@ repos:
   # https://github.com/python/mypy/issues/13916
   # https://jaredkhan.com/blog/mypy-pre-commit
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1  # 1.15.0
+    rev: v2.4.0  # 1.15.0
     hooks:
       - id: mypy
         language: system
