@@ -45,7 +45,7 @@ ci = [
     "pytest-memray==1.11.0",
     "mypy==2.4.0",
     "mypy-extensions==1.1.0",
-    "pandas==2.3.3",
+    "pandas==3.1.0",
     "pandas-stubs==3.0.5.260914",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
